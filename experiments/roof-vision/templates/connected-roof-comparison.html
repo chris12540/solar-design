@@ -1,0 +1,50 @@
+<div id="roof-connected-proof">
+  <h3>Roof reconstruction · cached house</h3>
+  <div class="viz-controls">
+    <button type="button" class="btn" data-layer="masks" aria-pressed="false">Detector masks</button>
+    <button type="button" class="btn" data-layer="polygons" aria-pressed="true">Connected polygons</button>
+    <label class="form-check"><input class="form-check-input" type="checkbox" id="roof-proof-photo" checked><span class="form-check-label">Photo</span></label>
+  </div>
+  <svg class="roof-proof-image" viewBox="0 0 248 220" role="img" aria-label="Automatically reconstructed roof polygons aligned with cached overhead photo">
+    <image id="roof-proof-rgb" width="248" height="220"></image>
+    <g id="roof-proof-masks"></g>
+    <g id="roof-proof-polygons"></g>
+    <g id="roof-proof-exclusions"></g>
+  </svg>
+  <div class="text-small" id="roof-proof-status" aria-live="polite"></div>
+  <div class="text-small">Includes solar data from Google · Experimental; not design ready</div>
+</div>
+<style>
+  #roof-connected-proof .roof-proof-image{display:block;width:100%;max-width:620px;height:auto;margin:12px auto;background:var(--muted)}
+  #roof-connected-proof .roof-face{fill:var(--viz-series-1);fill-opacity:.10;stroke:var(--viz-series-1);stroke-width:1.5;vector-effect:non-scaling-stroke;fill-rule:evenodd}
+  #roof-connected-proof .roof-exclusion{fill:none;stroke:var(--orange);stroke-width:1.5;stroke-dasharray:4 3;vector-effect:non-scaling-stroke}
+</style>
+<script type="application/json" id="roof-proof-data">{}</script>
+<script>
+(()=>{
+  const root=document.getElementById('roof-connected-proof');
+  const data=JSON.parse(document.getElementById('roof-proof-data').textContent);
+  const photo=root.querySelector('#roof-proof-photo');
+  const background=root.querySelector('#roof-proof-rgb');
+  background.setAttribute('href',data.photo);
+  const ns='http://www.w3.org/2000/svg';
+  for(const [layer,paths] of [['masks',data.masks],['polygons',data.polygons],['exclusions',data.exclusions]]){
+    for(const d of paths){const p=document.createElementNS(ns,'path');p.setAttribute('d',d);p.setAttribute('class',layer==='exclusions'?'roof-exclusion':'roof-face');root.querySelector('#roof-proof-'+layer).appendChild(p)}
+  }
+  let state={layer:'polygons',photo:true};
+  function draw(){
+    root.querySelector('#roof-proof-masks').style.display=state.layer==='masks'?'':'none';
+    root.querySelector('#roof-proof-polygons').style.display=state.layer==='polygons'?'':'none';
+    root.querySelector('#roof-proof-exclusions').style.display=state.layer==='polygons'?'':'none';
+    background.style.display=state.photo?'':'none';photo.checked=state.photo;
+    root.querySelectorAll('[data-layer]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.layer===state.layer)));
+    root.querySelector('#roof-proof-status').textContent=state.layer==='polygons'?data.summary:'Original detector masks · overlaps and pixel steps retained';
+  }
+  function restore(saved){const s=saved?.privateContent;if(s&&['masks','polygons'].includes(s.layer))state={layer:s.layer,photo:s.photo!==false};draw()}
+  function save(){window.openai?.setWidgetState?.({modelContent:{view:state.layer,photo:state.photo},privateContent:state})?.catch(()=>{})}
+  root.querySelectorAll('[data-layer]').forEach(b=>b.addEventListener('click',()=>{state.layer=b.dataset.layer;draw();save()}));
+  photo.addEventListener('change',()=>{state.photo=photo.checked;draw();save()});
+  window.addEventListener('openai:set_globals',e=>restore(e.detail?.globals?.widgetState));
+  restore(window.openai?.widgetState);
+})();
+</script>

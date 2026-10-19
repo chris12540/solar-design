@@ -1,0 +1,17 @@
+{
+  "repository": "nvidia/C-RADIOv4-H",
+  "revision": "0057b339059c0b9e1b4ba996f975410ebbfdfcc8",
+  "file": {
+    "type": "file",
+    "oid": "82a91b5590d969d46cd18d471995f1dcb2ffdbb2",
+    "size": 1681320675,
+    "lfs": {
+      "oid": "bace44df72e750bc8555ea6979cc19d1a87e12ade89582edfe090513d5d6aab9",
+      "size": 1681320675,
+      "pointerSize": 135
+    },
+    "xetHash": "a1feb0894ed48f743fe34d1ebb6cfe5d7d33d7e6869eabc61f124e358ae1b051",
+    "path": "c-radio_v4-h_half.pth.tar"
+  },
+  "radio_source_revision": "4ffaf15d0ff48197c194e306772bdb5fb92db230"
+}

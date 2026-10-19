@@ -1,0 +1,67 @@
+<div id="phase-one-roof-evidence">
+  <h3>Phase 1 · roof evidence</h3>
+  <div class="viz-controls">
+    <label class="form-label">Evidence
+      <select class="form-select" id="phase-one-view">
+        <option value="reference">Photo reference</option>
+        <option value="height">Height grid</option>
+        <option value="support">Source plane support</option>
+        <option value="photo">Photo only</option>
+      </select>
+    </label>
+    <label class="form-label" id="phase-one-focus-label">Inspect
+      <select class="form-select" id="phase-one-focus"></select>
+    </label>
+  </div>
+  <svg class="phase-one-image" viewBox="0 0 248 220" role="img" aria-label="Cached roof imagery with separate visual-reference, height and source-support evidence">
+    <image id="phase-one-background" width="248" height="220"></image>
+    <g id="phase-one-marks"></g>
+  </svg>
+  <div id="phase-one-detail" aria-live="polite"></div>
+  <div id="phase-one-legend" class="text-small"></div>
+  <div class="text-small">Includes solar data from Google · Reference is incomplete photo interpretation, not measured ground truth</div>
+</div>
+<style>
+  #phase-one-roof-evidence .phase-one-image{display:block;width:100%;max-width:680px;height:auto;margin:12px auto;background:var(--muted)}
+  #phase-one-roof-evidence .observed{stroke:var(--viz-series-1);fill:none;stroke-width:2;vector-effect:non-scaling-stroke}
+  #phase-one-roof-evidence .uncertain{stroke:var(--orange);fill:none;stroke-width:1.5;stroke-dasharray:5 4;vector-effect:non-scaling-stroke}
+  #phase-one-roof-evidence .support{stroke:var(--viz-series-1);fill:var(--viz-series-1);fill-opacity:.08;stroke-width:1.4;fill-rule:evenodd;vector-effect:non-scaling-stroke}
+  #phase-one-roof-evidence .selected{stroke-width:3}
+  #phase-one-roof-evidence #phase-one-detail{margin:8px 0}
+</style>
+<script type="application/json" id="phase-one-data">{}</script>
+<script>
+(()=>{
+  const root=document.getElementById('phase-one-roof-evidence');
+  const data=JSON.parse(document.getElementById('phase-one-data').textContent);
+  const view=root.querySelector('#phase-one-view'),focus=root.querySelector('#phase-one-focus');
+  const marks=root.querySelector('#phase-one-marks'),bg=root.querySelector('#phase-one-background');
+  let state={view:'reference',focus:'overview'};
+  let choicesKey=null;
+  const ns='http://www.w3.org/2000/svg';
+  const options=()=>['support','height'].includes(state.view)?data.planes:data.annotations;
+  function add(tag,attributes){const node=document.createElementNS(ns,tag);Object.entries(attributes).forEach(([k,v])=>node.setAttribute(k,String(v)));marks.appendChild(node);return node}
+  function choices(){const key=['support','height'].includes(state.view)?'planes':'annotations';if(key!==choicesKey){focus.replaceChildren();for(const item of [{id:'overview',label:'Overview'},...options()]){const option=document.createElement('option');option.value=item.id;option.textContent=item.label;focus.appendChild(option)}choicesKey=key}if(![...focus.options].some(o=>o.value===state.focus))state.focus='overview';focus.value=state.focus;focus.disabled=state.view==='photo'}
+  function draw(){
+    view.value=state.view;choices();marks.replaceChildren();bg.setAttribute('href',state.view==='height'?data.height:data.photo);
+    let detail=data.overviews[state.view];
+    if(state.view==='reference'){
+      for(const item of data.annotations){const selected=item.id===state.focus;const opacity=state.focus==='overview'||selected?1:.18;
+        if(item.xy)add('polyline',{points:item.xy.map(p=>p.map(v=>v+.5).join(',')).join(' '),class:(item.visibility==='clear'?'observed':'uncertain')+(selected?' selected':''),opacity});
+        else{const [x,y,x2,y2]=item.bbox_xyxy;add('rect',{x:x+.5,y:y+.5,width:x2-x,height:y2-y,class:'uncertain'+(selected?' selected':''),opacity})}
+        if(selected)detail=item.detail;
+      }
+    }else if(['support','height'].includes(state.view)){
+      for(const item of data.planes){if(state.view==='height'&&state.focus==='overview')continue;const selected=item.id===state.focus;add('path',{d:item.path,class:'support'+(selected?' selected':''),opacity:state.focus==='overview'||selected?1:.16});if(selected)detail=item.detail}
+    }
+    root.querySelector('#phase-one-detail').textContent=detail;
+    root.querySelector('#phase-one-legend').textContent=state.view==='reference'?'Solid: clear visible edge · Dashed: partial edge or uncertain region/feature':state.view==='height'?data.height_legend:state.view==='support'?'Outlines: original source support masks, not reconstructed roof polygons':'';
+  }
+  function save(){window.openai?.setWidgetState?.({modelContent:{phase:1,evidence:state.view,focus:state.focus},privateContent:state})?.catch(()=>{})}
+  function restore(saved){const s=saved?.privateContent;if(s&&['reference','height','support','photo'].includes(s.view)){state={view:s.view,focus:typeof s.focus==='string'?s.focus:'overview'}}draw()}
+  view.addEventListener('change',()=>{state={view:view.value,focus:'overview'};draw();save()});
+  focus.addEventListener('change',()=>{state.focus=focus.value;draw();save()});
+  window.addEventListener('openai:set_globals',e=>restore(e.detail?.globals?.widgetState));
+  restore(window.openai?.widgetState);
+})();
+</script>

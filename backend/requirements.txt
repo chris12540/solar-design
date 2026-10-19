@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+psycopg[binary]
+shapely
+itsdangerous
+pytest
+httpx
+numpy
+rasterio
+pyproj

@@ -1,0 +1,16 @@
+.venv/
+models/
+vendor/
+adapted/
+data/
+outputs/
+cache/
+.cache/
+__pycache__/
+houses/
+selection.json
+request-ledger.json
+summary.json
+reference.json
+phase1-reference.json
+provenance.json

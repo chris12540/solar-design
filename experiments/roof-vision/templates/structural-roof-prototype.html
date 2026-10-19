@@ -1,0 +1,101 @@
+<div id="structural-roof-prototype">
+  <div hidden aria-hidden="true"><span data-token="--background" style="color:var(--background)"></span><span data-token="--orange" style="color:var(--orange)"></span><span data-token="--viz-series-1" style="color:var(--viz-series-1)"></span><span data-token="--yellow" style="color:var(--yellow)"></span><span data-token="--muted" style="color:var(--muted)"></span><span data-token="--foreground" style="color:var(--foreground)"></span><span data-token="--muted-foreground" style="color:var(--muted-foreground)"></span></div>
+  <h3>Structural roof prototype</h3>
+  <div class="viz-controls">
+    <button class="btn" type="button" data-mode="3d" aria-pressed="true">3D house</button>
+    <button class="btn" type="button" data-mode="photo" aria-pressed="false">Photo overlay</button>
+    <button class="btn" type="button" data-mode="reference" aria-pressed="false">Your reference</button>
+  </div>
+  <div class="viz-controls">
+    <label class="form-label">Structure candidate <select class="form-select" id="structural-candidate"></select></label>
+    <label class="form-check"><input class="form-check-input" id="structural-levels" type="checkbox" checked><span class="form-check-label">Roof levels</span></label>
+  </div>
+  <canvas class="structural-scene cursor-interaction" role="img" aria-label="Rotatable automatic roof candidate with estimated walls; drag to rotate"></canvas>
+  <div class="viz-controls" id="structural-camera">
+    <label class="form-label">Rotate <input class="form-range" id="structural-yaw" type="range" min="-180" max="180" value="-40"></label>
+    <label class="form-label">Tilt <input class="form-range" id="structural-tilt" type="range" min="15" max="85" value="45"></label>
+  </div>
+  <div id="structural-detail" aria-live="polite"></div>
+  <div class="text-small" id="structural-legend"></div>
+  <div class="text-small">One dormer candidate modeled · Small southern dormer and lower connections unresolved</div>
+  <div class="text-small">Walls and ground estimated · No AHJ approval or panel placement</div>
+  <div class="text-small">Includes solar data from Google · User drawing is reference, not generated geometry</div>
+</div>
+<style>
+  #structural-roof-prototype .structural-scene{display:block;width:100%;max-width:800px;height:auto;margin:12px auto;touch-action:pan-y;background:var(--background)}
+  #structural-roof-prototype #structural-detail{margin:8px 0}
+  #structural-roof-prototype #structural-camera[hidden]{display:none}
+</style>
+<script type="application/json" id="structural-roof-data">{}</script>
+<script>
+(()=>{
+  const root=document.getElementById('structural-roof-prototype');
+  const data=JSON.parse(document.getElementById('structural-roof-data').textContent);
+  const canvas=root.querySelector('canvas'),ctx=canvas.getContext('2d');
+  const picker=root.querySelector('#structural-candidate'),levels=root.querySelector('#structural-levels');
+  const yaw=root.querySelector('#structural-yaw'),tilt=root.querySelector('#structural-tilt');
+  let state={mode:'3d',candidate:data.selected,levels:true,yaw:-40,tilt:45,face:null};
+  let hit=[],drag=null;
+  const photo=new Image(),reference=new Image();photo.src=data.photo;reference.src=data.reference;
+  for(const candidate of data.candidates){const option=document.createElement('option');option.value=candidate.id;option.textContent=candidate.label;picker.appendChild(option)}
+  const color=(token)=>getComputedStyle(root.querySelector('[data-token="'+token+'"]')).color;
+  const sampler=document.createElement('canvas');sampler.width=sampler.height=1;const sampleContext=sampler.getContext('2d');
+  function rgb(token){sampleContext.clearRect(0,0,1,1);sampleContext.fillStyle=color('--background');sampleContext.fillRect(0,0,1,1);sampleContext.fillStyle=color(token);sampleContext.fillRect(0,0,1,1);return [...sampleContext.getImageData(0,0,1,1).data].slice(0,3)}
+  const shade=(value,scale)=>'rgb('+value.map(v=>Math.round(Math.max(0,Math.min(255,v*scale)))).join(',')+')';
+  const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+  const sub=(a,b)=>a.map((v,i)=>v-b[i]);
+  function current(){return data.candidates.find(c=>c.id===state.candidate)||data.candidates[0]}
+  function size(){const width=Math.min(root.clientWidth,800),height=Math.round(width*.76),ratio=window.devicePixelRatio||1;canvas.width=Math.round(width*ratio);canvas.height=Math.round(height*ratio);canvas.style.width=width+'px';canvas.style.height=height+'px';ctx.setTransform(ratio,0,0,ratio,0,0);return {width,height}}
+  function imageView(image,width,height){const scale=Math.min(width/image.width,height/image.height);const w=image.width*scale,h=image.height*scale;ctx.drawImage(image,(width-w)/2,(height-h)/2,w,h);return {scale,x:(width-w)/2,y:(height-h)/2}}
+  function draw(){
+    const {width,height}=size(),candidate=current();hit=[];
+    const roofColor=rgb('--orange'),upper=rgb('--viz-series-1'),lower=rgb('--yellow'),walls=rgb('--muted'),ink=rgb('--foreground'),unknown=rgb('--muted-foreground');
+    ctx.clearRect(0,0,width,height);picker.value=candidate.id;levels.checked=state.levels;yaw.value=state.yaw;tilt.value=state.tilt;
+    root.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===state.mode)));
+    root.querySelector('#structural-camera').hidden=state.mode!=='3d';
+    let detail=candidate.description;
+    if(state.mode==='reference'){
+      if(reference.complete&&reference.naturalWidth)imageView(reference,width,height);
+      detail='Your marked, differently captured Google Maps 3D image. Blue: second story; yellow: first story; red: obstructions. Semantic reference only.';
+    }else if(state.mode==='photo'){
+      if(photo.complete&&photo.naturalWidth){const frame=imageView(photo,width,height);const tf=data.local_to_pixel;
+        function ringPath(ring){ring.forEach(([x,y],i)=>{const px=frame.x+(tf[0]*x+tf[1]*y+tf[2])*frame.scale,py=frame.y+(tf[3]*x+tf[4]*y+tf[5])*frame.scale;i?ctx.lineTo(px,py):ctx.moveTo(px,py)});ctx.closePath()}
+        for(const face of candidate.faces){const selected=face.id===state.face;ctx.beginPath();for(const part of face.parts){ringPath(part.polygon);for(const hole of part.holes||[])ringPath(hole)}ctx.fillStyle=shade(state.levels?(face.role==='main_roof'||face.role==='dormer_roof'?upper:lower):roofColor,1);ctx.globalAlpha=.09;ctx.fill('evenodd');ctx.globalAlpha=1;ctx.strokeStyle=shade(selected?ink:state.levels?(face.role==='main_roof'||face.role==='dormer_roof'?upper:lower):roofColor,1);ctx.lineWidth=selected?2.5:1.5;ctx.setLineDash(face.role==='unresolved_context'?[5,4]:[]);ctx.stroke();ctx.setLineDash([])}
+      }
+    }else{
+      const vertices=candidate.mesh.vertices,triangles=candidate.mesh.triangles,surfaces=candidate.mesh.surfaces;
+      const lo=[0,1,2].map(k=>Math.min(...vertices.map(p=>p[k]))),hi=[0,1,2].map(k=>Math.max(...vertices.map(p=>p[k]))),center=lo.map((v,k)=>(v+hi[k])/2);
+      const az=state.yaw*Math.PI/180,el=state.tilt*Math.PI/180;
+      const projected=vertices.map(p=>{const [x,y,z]=sub(p,center);return [Math.cos(az)*x+Math.sin(az)*y,-(-Math.sin(az)*Math.sin(el)*x+Math.cos(az)*Math.sin(el)*y+Math.cos(el)*z),Math.sin(az)*Math.cos(el)*x-Math.cos(az)*Math.cos(el)*y+Math.sin(el)*z]});
+      const xmin=Math.min(...projected.map(p=>p[0])),xmax=Math.max(...projected.map(p=>p[0])),ymin=Math.min(...projected.map(p=>p[1])),ymax=Math.max(...projected.map(p=>p[1]));
+      const scale=.88*Math.min(width/(xmax-xmin||1),height/(ymax-ymin||1));
+      const screen=projected.map(p=>[width/2+(p[0]-(xmin+xmax)/2)*scale,height/2+(p[1]-(ymin+ymax)/2)*scale,p[2]]);
+      const order=triangles.map((triangle,i)=>({i,depth:triangle.reduce((s,j)=>s+screen[j][2],0)/3})).sort((a,b)=>a.depth-b.depth);
+      for(const item of order){const i=item.i,indices=triangles[i],surface=surfaces[i],points=indices.map(j=>screen[j]);
+        const path=new Path2D();path.moveTo(points[0][0],points[0][1]);path.lineTo(points[1][0],points[1][1]);path.lineTo(points[2][0],points[2][1]);path.closePath();
+        const n=cross(sub(vertices[indices[1]],vertices[indices[0]]),sub(vertices[indices[2]],vertices[indices[0]]));const norm=Math.hypot(...n)||1;
+        const lighting=.62+.30*Math.abs((-.35*n[0]-.45*n[1]+.82*n[2])/norm);
+        const base=surface.kind==='roof'?(surface.role==='unresolved_context'?unknown:state.levels?(surface.role==='main_roof'||surface.role==='dormer_roof'?upper:lower):roofColor):walls;
+        ctx.fillStyle=shade(base,lighting);ctx.strokeStyle=ctx.fillStyle;ctx.lineWidth=.6;ctx.fill(path);ctx.stroke(path);
+        if(surface.face_id===state.face){ctx.strokeStyle=shade(ink,1);ctx.lineWidth=1;ctx.stroke(path)}
+        hit.push({path,face:surface.face_id});
+      }
+      if(state.face){const face=candidate.faces.find(f=>f.id===state.face);if(face)detail=face.description}
+    }
+    root.querySelector('#structural-detail').textContent=detail;
+    root.querySelector('#structural-legend').textContent=state.mode==='reference'?'User-provided labels; pixels are not metric measurements':state.mode==='3d'?'Drag to rotate · Select roof for details · Roof levels inferred; walls illustrative':'Automatic structural polygons on cached photo · Dashed: unresolved context';
+  }
+  function save(){window.openai?.setWidgetState?.({modelContent:{phase:2,view:state.mode,candidate:state.candidate,selectedRoof:state.face},privateContent:state})?.catch(()=>{})}
+  function restore(saved){const s=saved?.privateContent;if(s&&['3d','photo','reference'].includes(s.mode)){state={...state,...s,yaw:Math.max(-180,Math.min(180,Number.isFinite(s.yaw)?s.yaw:-40)),tilt:Math.max(15,Math.min(85,Number.isFinite(s.tilt)?s.tilt:45))};if(!data.candidates.some(c=>c.id===state.candidate))state.candidate=data.selected}draw()}
+  root.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{state.mode=b.dataset.mode;draw();save()}));
+  picker.addEventListener('change',()=>{state.candidate=picker.value;state.face=null;draw();save()});levels.addEventListener('change',()=>{state.levels=levels.checked;draw();save()});
+  yaw.addEventListener('input',()=>{state.yaw=Number(yaw.value);draw()});tilt.addEventListener('input',()=>{state.tilt=Number(tilt.value);draw()});yaw.addEventListener('change',save);tilt.addEventListener('change',save);
+  canvas.addEventListener('pointerdown',e=>{if(state.mode!=='3d')return;drag={x:e.clientX,y:e.clientY,yaw:state.yaw,tilt:state.tilt};canvas.setPointerCapture(e.pointerId)});
+  canvas.addEventListener('pointermove',e=>{if(!drag)return;state.yaw=((drag.yaw+(e.clientX-drag.x)*.5+540)%360)-180;state.tilt=Math.max(15,Math.min(85,drag.tilt+(e.clientY-drag.y)*.35));draw()});
+  canvas.addEventListener('pointerup',e=>{if(!drag)return;if(Math.hypot(e.clientX-drag.x,e.clientY-drag.y)<5){const box=canvas.getBoundingClientRect(),ratio=window.devicePixelRatio||1,x=(e.clientX-box.left)*ratio,y=(e.clientY-box.top)*ratio;state.face=[...hit].reverse().find(item=>ctx.isPointInPath(item.path,x,y))?.face||null;draw()}drag=null;save()});
+  canvas.addEventListener('pointercancel',()=>{drag=null});
+  photo.onload=()=>draw();reference.onload=()=>draw();new ResizeObserver(draw).observe(root);
+  const theme=window.matchMedia('(prefers-color-scheme: dark)');theme.addEventListener('change',draw);
+  window.addEventListener('openai:set_globals',e=>restore(e.detail?.globals?.widgetState));restore(window.openai?.widgetState);
+})();
+</script>

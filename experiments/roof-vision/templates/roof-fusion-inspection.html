@@ -1,0 +1,80 @@
+<div id="roof-fusion-inspection">
+  <style>
+    #roof-fusion-inspection .fusion-controls{display:flex;flex-wrap:wrap;gap:12px;padding-right:90px;align-items:end}
+    #roof-fusion-inspection .fusion-controls label{min-width:150px;flex:1}
+    #roof-fusion-inspection .fusion-photo{display:block;width:100%;height:auto;margin:12px 0}
+    #roof-fusion-inspection .fusion-key{display:flex;flex-wrap:wrap;gap:12px;margin:8px 0}
+    #roof-fusion-inspection .fusion-key i{display:inline-block;width:10px;height:10px;margin-right:5px}
+    #roof-fusion-inspection .fusion-status{margin:8px 0;color:var(--muted-foreground)}
+    #roof-fusion-inspection .fusion-details{display:flex;flex-wrap:wrap;gap:6px 18px;margin:8px 0}
+    #roof-fusion-inspection svg text{fill:var(--foreground);font-size:12px;font-weight:500}
+    #roof-fusion-inspection .fusion-detail-heading{font-weight:500}
+  </style>
+  <div class="fusion-controls">
+    <label class="form-label">View
+      <select class="form-select" data-view>
+        <option value="raw">Raw image lines</option><option value="fused" selected>Fused roof faces</option>
+        <option value="height">Height differences</option><option value="photo">Photo only</option>
+      </select>
+    </label>
+    <label class="form-label">Roof face<select class="form-select" data-face></select></label>
+  </div>
+  <div class="fusion-status text-small" data-status></div>
+  <svg class="fusion-photo" role="img" aria-label="Cached roof photograph with selectable fused faces and unresolved areas" data-photo></svg>
+  <div class="fusion-key text-small" data-key></div>
+  <div aria-live="polite">
+    <div class="fusion-detail-heading" data-heading></div>
+    <div class="fusion-details tabular-nums" data-details></div>
+    <div class="text-small" data-connections></div>
+  </div>
+  <div class="text-small fusion-status">Experimental · Physical alignment unverified · Capture dates differ by 20 days · Includes solar data from Google</div>
+  <script type="application/json" id="roof-fusion-data">{}</script>
+  <script>
+  (()=>{
+    const root=document.getElementById('roof-fusion-inspection');
+    const data=JSON.parse(root.querySelector('#roof-fusion-data').textContent);
+    const svg=root.querySelector('[data-photo]'),viewSelect=root.querySelector('[data-view]'),faceSelect=root.querySelector('[data-face]');
+    const states={google_supported:'Google-linked',new_plane_provisional:'Height-fit proposal',unresolved:'Unresolved'};
+    let state={view:'fused',face:'F2'};
+    const saved=window.openai?.widgetState;const existing=saved?.privateContent||saved?.modelContent||saved;
+    if(existing&&typeof existing==='object')state={...state,...existing};
+    function validState(){if(!['raw','fused','height','photo'].includes(state.view))state.view='fused';if(!data.faces.some(f=>f.id===state.face))state.face=data.faces[0].id;}
+    function persist(){window.openai?.setWidgetState?.({modelContent:{view:state.view,face:state.face},privateContent:{view:state.view,face:state.face}})?.catch(()=>{});}
+    function path(rings,scale){return rings.map(r=>'M'+r.map(p=>`${(p[0]*scale).toFixed(2)},${(p[1]*scale).toFixed(2)}`).join('L')+'Z').join('');}
+    function linePath(lines,scale){return lines.map(r=>'M'+r.map(p=>`${(p[0]*scale).toFixed(2)},${(p[1]*scale).toFixed(2)}`).join('L')).join('');}
+    function color(f){return f.state==='unresolved'?'var(--orange)':f.state==='new_plane_provisional'?'var(--viz-series-2)':'var(--viz-series-1)';}
+    function render(){
+      validState();viewSelect.value=state.view;faceSelect.value=state.face;
+      const width=Math.max(280,root.clientWidth),scale=width/data.width,height=data.height*scale;
+      svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
+      let html=`<defs><pattern id="fusion-hatch" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M-2,2L2,-2M0,8L8,0M6,10L10,6" stroke="var(--orange)" stroke-width="1" opacity="0.7"/></pattern></defs><image href="${data.photo}" width="${width}" height="${height}"/>`;
+      if(state.view==='raw')html+=`<path d="${linePath(data.raw,scale)}" fill="none" stroke="var(--viz-series-1)" stroke-width="1.5"/>`;
+      if(state.view==='fused'||state.view==='height'){
+        html+=`<path d="${path(data.unknown,scale)}" fill="url(#fusion-hatch)" fill-rule="evenodd" opacity="0.55"/>`;
+        if(state.view==='height')for(const bin of data.residual){html+=`<path d="${path(bin.rings,scale)}" fill="${['var(--green)','var(--orange)','var(--red)'][bin.level]}" fill-rule="evenodd" opacity="0.55"/>`;}
+        for(const f of data.faces){const selected=f.id===state.face;html+=`<path data-pick="${f.id}" class="cursor-interaction" d="${path(f.rings,scale)}" fill="${color(f)}" fill-opacity="${state.view==='height'?'0.01':selected?'0.22':'0.08'}" fill-rule="evenodd" stroke="${color(f)}" stroke-width="${selected?'2.3':'1.3'}" ${f.state==='unresolved'?'stroke-dasharray="4 3"':''}/>`;}
+        for(const e of data.edges)if(e.kind.startsWith('unresolved'))html+=`<path d="${linePath(e.lines,scale)}" fill="none" stroke="var(--orange)" stroke-width="1.7" stroke-dasharray="5 4" pointer-events="none"/>`;
+        for(const f of data.faces)if(f.area>=2||f.id===state.face){const x=f.label[0]*scale,y=f.label[1]*scale;html+=`<g pointer-events="none"><rect x="${x-14}" y="${y-10}" width="28" height="20" rx="3" fill="var(--background)" opacity="0.9"/><text x="${x}" y="${y+4}" text-anchor="middle">${f.id}</text></g>`;}
+      }
+      svg.innerHTML=html;
+      root.querySelector('[data-status]').textContent=`${data.supported} of ${data.faces.length} faces have height estimates · ${Math.round(data.coverage*100)}% of cached roof mask covered · Unresolved areas retained`;
+      const key=root.querySelector('[data-key]');
+      key.innerHTML=state.view==='height'?'<span><i style="background:var(--green)"></i>≤10 cm</span><span><i style="background:var(--orange)"></i>10–20 cm</span><span><i style="background:var(--red)"></i>>20 cm</span><span>Hatching: no supported face</span>':state.view==='fused'?'<span><i style="background:var(--viz-series-1)"></i>Google-linked</span><span><i style="background:var(--viz-series-2)"></i>Height-fit proposal</span><span><i style="background:var(--orange)"></i>Unresolved / uncertain join</span>':state.view==='raw'?'<span>Raw RoofMapNet candidates · score ≥0.50 · Crossings remain visible</span>':'';
+      const f=data.faces.find(f=>f.id===state.face);
+      root.querySelector('[data-heading]').textContent=`${f.id} · ${states[f.state]}`;
+      const facts=[`${f.area.toFixed(2)} m² projected`,`${f.samples} interior height samples`];
+      if(f.rmse!==null){facts.push(`Height RMSE ${(f.rmse*100).toFixed(1)} cm`,`Pitch ${f.pitch.toFixed(1)}°`,`Azimuth ${f.azimuth.toFixed(1)}°`);if(f.google!==null)facts.push(`Google segment ${f.google}`);facts.push(f.joint?'Joint fit applied':'Plane fit only');}
+      else facts.push(f.reason||'Insufficient height evidence');
+      root.querySelector('[data-details]').replaceChildren(...facts.map(text=>{const s=document.createElement('span');s.textContent=text;return s;}));
+      const attached=data.edges.filter(e=>e.faces.includes(f.id));
+      root.querySelector('[data-connections]').textContent=attached.length?attached.map(e=>`${e.faces.filter(id=>id!==f.id).join(', ')}: ${e.kind.replaceAll('_',' ')}${e.gap===null?'':` · ${(e.gap*100).toFixed(1)} cm height gap`}`).join(' | '):'No shared connection established';
+    }
+    for(const f of data.faces){const option=document.createElement('option');option.value=f.id;option.textContent=`${f.id} · ${states[f.state]}`;faceSelect.append(option);}
+    viewSelect.addEventListener('change',()=>{state.view=viewSelect.value;render();persist();});
+    faceSelect.addEventListener('change',()=>{state.face=faceSelect.value;render();persist();});
+    svg.addEventListener('click',event=>{const id=event.target.closest('[data-pick]')?.getAttribute('data-pick');if(id){state.face=id;render();persist();}});
+    window.addEventListener('openai:set_globals',event=>{const s=event.detail?.globals?.widgetState;if(s){state={...state,...(s.privateContent||s.modelContent||s)};render();}});
+    new ResizeObserver(render).observe(root);render();
+  })();
+  </script>
+</div>

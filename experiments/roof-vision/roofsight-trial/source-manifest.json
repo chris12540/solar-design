@@ -1,0 +1,56 @@
+{
+  "repository": "Deagin/RoofSegmentation2",
+  "revision": "2a3658e8bf36127b57a604ca7309e867c3dc5279",
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "fe64e6115b358f6cff12c307705fec4bf38dda08ffbb0d5afa1b6eaebbdcacee",
+      "bytes": 2078
+    },
+    {
+      "path": "building.py",
+      "sha256": "a7189aaab4f6f395578b75500004575ebe35893e99df51c4cb90d26d9744d8e1",
+      "bytes": 4656
+    },
+    {
+      "path": "fusion.py",
+      "sha256": "e29ae9c302d6d76021a317827b4bfd7dd9cfa4ff68f1238bd6013e8e4a970fad",
+      "bytes": 5874
+    },
+    {
+      "path": "geo_export.py",
+      "sha256": "9482e0f44d736ae68482a253cbb2584897d9fac4ec7c933b3cf10288cb2407a9",
+      "bytes": 4881
+    },
+    {
+      "path": "google_solar.py",
+      "sha256": "bcf78b19896682fbdcae5056510b63365f94203ad63a3a476446bb0b7a11d1b7",
+      "bytes": 4446
+    },
+    {
+      "path": "pipeline.py",
+      "sha256": "c9d0a93f9f093bc242c5d2e62efc865383066fea7d20606b6883792016fbdafa",
+      "bytes": 12272
+    },
+    {
+      "path": "radio_backbone.py",
+      "sha256": "3424b7a88a588bc07f2e3226a3431d62d918b3b4c2fdf7b599254e36b2eb7b80",
+      "bytes": 11524
+    },
+    {
+      "path": "ransac_planes.py",
+      "sha256": "1b888e1e102571b2ce2f58b36beeed16835a1a8caad2e3eca1c8cae0d54a2cad",
+      "bytes": 10697
+    },
+    {
+      "path": "text_embeddings.pt",
+      "sha256": "42518c9307817c52b0b851550a160953edfc56148bb6107b02799b65e1c1db1a",
+      "bytes": 69060
+    },
+    {
+      "path": "requirements.txt",
+      "sha256": "4f5564f13df1ad19b0276cc7694f8427629de032a5fdf2712c5fedfcf7c3dc13",
+      "bytes": 184
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+.roof-inspection{border-top:1px solid var(--hs-line)}
+.roof-inspection>summary,.roof-face-list>summary{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:42px;list-style:none;cursor:pointer;font-weight:500}
+.roof-inspection>summary::-webkit-details-marker,.roof-face-list>summary::-webkit-details-marker{display:none}
+.roof-inspection>summary::after,.roof-face-list>summary::after{content:'+';color:var(--hs-muted);font-size:17px;font-weight:400}
+.roof-inspection[open]>summary::after,.roof-face-list[open]>summary::after{content:'−'}
+.roof-panel{padding:0 0 12px;font-size:12px;line-height:1.45}
+.roof-panel h3{margin:2px 0 8px;font-size:14px;font-weight:600}
+.roof-message{margin:5px 0 9px;color:var(--hs-muted)}
+.roof-result-head{display:flex;justify-content:space-between;gap:10px;margin:8px 0;color:var(--hs-fg);font-size:12px}
+.roof-result-head span{color:var(--hs-muted)}
+.roof-view-tabs{display:flex;width:max-content;max-width:100%;gap:2px;margin:8px 0 5px;padding:3px;border:1px solid var(--hs-line);border-radius:7px;background:var(--hs-surface,#f3f5f3)}
+.roof-view-tabs button{min-height:29px;padding:4px 9px;border:0;border-radius:5px;background:transparent;color:var(--hs-muted);font:inherit;font-size:12px;cursor:pointer}
+.roof-view-tabs button[aria-selected="true"]{background:var(--hs-bg,#fff);color:var(--hs-fg);box-shadow:0 1px 3px #0002;font-weight:600}
+.roof-view-tabs button:focus-visible{outline:2px solid var(--hs-green);outline-offset:1px}
+.roof-diagram-wrap{margin:7px 0}
+.roof-diagram{display:block;width:100%;height:auto;border:1px solid var(--hs-line);border-radius:8px}
+.roof-diagram-bg{fill:#f6f8f5}
+.roof-north{fill:#314c3b;stroke:#314c3b;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;font:600 11px system-ui,-apple-system,sans-serif}
+.roof-north text{stroke:none}
+.roof-legend{display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:5px;color:var(--hs-muted);font-size:12px}
+.roof-legend span{display:flex;align-items:center;gap:5px}
+.roof-legend i{display:inline-block;width:12px;height:12px;border:1px solid #52675a;border-radius:3px}
+.roof-legend-face{background:#90b99c}.roof-legend-obstruction{background:#e39a52}
+.roof-legend-unknown{background:#dce2df}.roof-legend-edge{height:0!important;border:0!important;border-top:2px dashed #7449a6!important;border-radius:0!important}.roof-legend-rank{background:transparent;border:2px solid #f4fff4!important}
+.roof-inferred-edge{stroke:#7449a6;stroke-width:2;stroke-dasharray:5 4;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.roof-candidate-highlight{stroke:#f4fff4;stroke-width:3;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.roof-hole-outline{vector-effect:non-scaling-stroke}
+.roof-candidates{margin:8px 0 5px;padding-top:8px;border-top:1px solid var(--hs-line)}
+.roof-candidates h4{margin:0;font-size:12px;font-weight:600}
+.roof-ranking-note{margin:2px 0 5px;color:var(--hs-muted);font-size:11px}
+.roof-source-mismatch{margin:6px 0;padding:6px 8px;border-left:3px solid #b36b29;background:#fcf3e3;color:#765115;font-size:11px;overflow-wrap:anywhere}
+.roof-candidates ol{margin:0;padding:0;list-style:none}
+.roof-candidate-row{padding:6px 0;border-top:1px solid var(--hs-line)}
+.roof-candidate-title{display:flex;justify-content:space-between;gap:8px}
+.roof-exposure-unknown{align-self:start;padding:1px 5px;border-radius:8px;background:#f3ead5;color:#765115;font-size:10px;font-weight:500}
+.roof-candidate-title span,.roof-candidate-row p{color:var(--hs-muted)}
+.roof-candidate-row p{margin:2px 0;font-size:11px;overflow-wrap:anywhere}
+.roof-candidate-row p b{color:var(--hs-fg)}
+.roof-all-candidates{margin-top:5px}
+.roof-all-candidates ol{margin-top:0}
+.roof-caveat{margin:8px 0;padding:7px 8px;border-radius:5px;background:#fcf3e3;color:#765115;font-size:12px;font-weight:550}
+.roof-warnings{margin:7px 0;padding-left:18px;color:#765115}
+.roof-warnings li{margin:3px 0}
+.roof-face-list{margin-top:7px;border-top:1px solid var(--hs-line)}
+.roof-face-list>summary{min-height:36px;font-size:12px}
+.roof-face-list ul{margin:0 0 7px;padding:0;list-style:none}
+.roof-face-list li{display:grid;gap:2px;padding:6px 0;border-top:1px solid var(--hs-line)}
+.roof-face-list li span{color:var(--hs-muted)}
+.roof-charge-note,.roof-attribution{margin:7px 0;color:var(--hs-muted);font-size:12px}
+.roof-action{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:36px;padding:6px 11px;border:1px solid var(--hs-green);border-radius:6px;background:var(--hs-green);color:#fff!important;font-size:12px;font-weight:550}
+.roof-action:disabled{opacity:.58;cursor:default}
+.roof-spinner{width:13px;height:13px;border:2px solid #ffffff70;border-top-color:#fff;border-radius:50%;animation:roof-spin .75s linear infinite}
+@keyframes roof-spin{to{transform:rotate(360deg)}}
+.roof-error{display:grid;gap:5px;margin:7px 0;padding:8px;border-radius:6px;background:#fcf0f0;color:#8f3442;font-size:12px;overflow-wrap:anywhere}
+.roof-error button{justify-self:start;padding:2px 0;border:0;background:transparent;color:inherit;text-decoration:underline;font-size:12px}
+.roof-attribution{margin-top:9px}
+@media(prefers-color-scheme:dark){.roof-diagram-bg{fill:#29362e}.roof-north{fill:#d6e2d8;stroke:#d6e2d8}.roof-caveat{background:#3d3424;color:#e4bd7a}.roof-warnings{color:#e4bd7a}.roof-error{background:#3e2930;color:#e8a4b0}.roof-view-tabs{background:#202b23}.roof-view-tabs button[aria-selected="true"]{background:#344239}.roof-candidate-highlight{stroke:#23372a}.roof-source-mismatch{background:#3d3424;color:#e4bd7a}.roof-exposure-unknown{background:#3d3424;color:#e4bd7a}}
+
+.roof-photo-controls{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;margin:6px 0;color:var(--hs-muted);font-size:12px}
+.roof-photo-controls label{display:flex;align-items:center;gap:4px;cursor:pointer}
+.roof-photo-controls input[type="checkbox"]{width:14px;height:14px;min-width:14px;min-height:14px;padding:0;margin:0;flex:0 0 14px;accent-color:var(--hs-green)}
+.roof-diagram-photo .roof-face-shape{fill-opacity:.25;stroke:#d6ffb5;stroke-width:1.8}
+.roof-diagram-photo .roof-outline-shape{fill-opacity:0;stroke:#fff;stroke-opacity:.6}
+.roof-diagram-photo .roof-obstruction-shape{fill-opacity:.5}
+.roof-raw-overlay{stroke:#f7c45d;stroke-width:1.2;stroke-dasharray:3 2;vector-effect:non-scaling-stroke}
+.roof-legend-raw{height:0!important;border:0!important;border-top:2px dashed #c18b20!important;border-radius:0!important}
+.roof-fit-checks>summary{color:#91601d;font-size:11px}
+
+.roof-diagram-actions{display:flex;justify-content:flex-end;margin:0 0 5px}
+.roof-diagram-actions .roof-enlarge,.roof-diagram-modal .roof-modal-close{display:inline-flex;align-items:center;justify-content:center;width:auto;min-width:0;min-height:30px;padding:4px 10px;border:1px solid var(--hs-line,#dfe5df);border-radius:6px;background:var(--hs-bg,#fff);color:var(--hs-fg,#25352d);font:500 12px/1.4 system-ui,-apple-system,sans-serif;cursor:pointer}
+.roof-diagram-modal{position:fixed;inset:0;width:min(1100px,calc(100vw - 32px));height:min(820px,90dvh);max-width:calc(100vw - 32px);max-height:90dvh;margin:auto;padding:16px;border:1px solid var(--hs-line,#dfe5df);border-radius:12px;background:var(--hs-bg,#fff);color:var(--hs-fg,#25352d);box-shadow:0 20px 80px #10251c55;overflow:hidden;font:12px/1.45 system-ui,-apple-system,sans-serif}
+.roof-diagram-modal[open]{display:flex;flex-direction:column;gap:8px}
+.roof-diagram-modal::backdrop{background:#10251c99}
+.roof-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none}
+.roof-modal-head h2{margin:0;font-size:16px;font-weight:600;line-height:1.35}
+.roof-modal-head h2 span{color:var(--hs-muted,#647168);font-weight:400}
+.roof-modal-caveat{flex:none;margin:0;color:var(--hs-muted,#647168);font-size:12px}
+.roof-modal-diagram{display:flex;flex-direction:column;flex:1;min-height:0;gap:6px;overflow:auto}
+.roof-modal-diagram .roof-diagram{flex:1 1 0;width:100%;height:100%;min-height:100px;object-fit:contain}
+.roof-modal-diagram .roof-photo-controls,.roof-modal-diagram .roof-legend,.roof-modal-diagram .roof-attribution{flex:none;margin:0}
+.roof-modal-diagram .roof-diagram path,.roof-modal-diagram .roof-diagram polyline{vector-effect:non-scaling-stroke}
+.roof-diagram-modal button:focus-visible{outline:2px solid var(--hs-green,#28634a);outline-offset:3px}
+@media(max-width:560px){.roof-diagram-modal{width:calc(100vw - 16px);max-width:calc(100vw - 16px);padding:12px}.roof-modal-head h2{font-size:14px}.roof-modal-head h2 span{display:block}.roof-modal-diagram .roof-legend{font-size:11px;gap:4px 10px}}

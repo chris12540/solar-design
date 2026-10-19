@@ -1,0 +1,259 @@
+{
+  "source": "user_provided_d1_snapshot",
+  "county": "Maricopa",
+  "state": "AZ",
+  "ahjs": [
+    {
+      "id": "az-avondale",
+      "name": "Avondale",
+      "ahj_type": "city",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-buckeye",
+      "name": "Buckeye",
+      "ahj_type": "city",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-carefree",
+      "name": "Carefree",
+      "ahj_type": "town",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-cave-creek",
+      "name": "Cave Creek",
+      "ahj_type": "town",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-chandler",
+      "name": "Chandler",
+      "ahj_type": "city",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-el-mirage",
+      "name": "El Mirage",
+      "ahj_type": "city",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-fort-mcdowell-yavapai",
+      "name": "Fort McDowell Yavapai Nation",
+      "ahj_type": "other",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-fountain-hills",
+      "name": "Fountain Hills",
+      "ahj_type": "town",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-gila-bend",
+      "name": "Gila Bend",
+      "ahj_type": "town",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-gila-river-community",
+      "name": "Gila River Indian Community",
+      "ahj_type": "other",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-gilbert",
+      "name": "Gilbert",
+      "ahj_type": "town",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-glendale",
+      "name": "Glendale",
+      "ahj_type": "city",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-goodyear",
+      "name": "Goodyear",
+      "ahj_type": "city",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-guadalupe",
+      "name": "Guadalupe",
+      "ahj_type": "town",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-litchfield-park",
+      "name": "Litchfield Park",
+      "ahj_type": "city",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-maricopa-county-unincorporated",
+      "name": "Maricopa County (unincorporated)",
+      "ahj_type": "county_unincorporated",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-mesa",
+      "name": "Mesa",
+      "ahj_type": "city",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-paradise-valley",
+      "name": "Paradise Valley",
+      "ahj_type": "town",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-peoria",
+      "name": "Peoria",
+      "ahj_type": "city",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-phoenix",
+      "name": "Phoenix",
+      "ahj_type": "city",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-queen-creek",
+      "name": "Queen Creek",
+      "ahj_type": "town",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-salt-river-pima-maricopa",
+      "name": "Salt River Pima-Maricopa Indian Community",
+      "ahj_type": "other",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-scottsdale",
+      "name": "Scottsdale",
+      "ahj_type": "city",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-surprise",
+      "name": "Surprise",
+      "ahj_type": "city",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-tempe",
+      "name": "Tempe",
+      "ahj_type": "city",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-tolleson",
+      "name": "Tolleson",
+      "ahj_type": "city",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-wickenburg",
+      "name": "Wickenburg",
+      "ahj_type": "town",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    },
+    {
+      "id": "az-youngtown",
+      "name": "Youngtown",
+      "ahj_type": "town",
+      "county": "Maricopa",
+      "state": "AZ",
+      "boundary_ref": null,
+      "status": "draft"
+    }
+  ]
+}

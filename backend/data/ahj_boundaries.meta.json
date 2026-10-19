@@ -1,0 +1,25 @@
+{
+  "snapshot_date": "2026-10-13",
+  "artifact_sha256": "353123df74fdfdf1e445ebe8c277b98c0a522e6754446fff8f73d058755fe667",
+  "features": 27,
+  "sources": [
+    {
+      "name": "Arizona Incorporated Places Boundaries",
+      "url": "https://services6.arcgis.com/clPWQMwZfdWn4MQZ/arcgis/rest/services/Incorporated_Places_Boundaries/FeatureServer/0",
+      "data_last_edited": "2025-08-18",
+      "query_snapshot_sha256": "7ce274c05a2ac5c2146dd3e0f8cee93451b4f96cd3b4e7a7fbe32d9474315c52",
+      "selected_features": 24
+    },
+    {
+      "name": "Census TIGERweb Federal American Indian Reservations",
+      "url": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/AIANNHA/MapServer/2",
+      "vintage": "2026-01-01",
+      "query_snapshot_sha256": "ffe9362a3c2f9f0947cdeb5699f971c46021ffc5aa0a8d24b8a26ec9987e319d",
+      "selected_features": 3
+    }
+  ],
+  "geometry_repairs": {
+    "raw_invalid_features": 12,
+    "method": "Shapely make_valid; retain and union polygonal components for GeometryCollections; source artifact remains unchanged"
+  }
+}

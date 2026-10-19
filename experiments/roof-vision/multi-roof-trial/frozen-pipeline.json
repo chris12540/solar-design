@@ -1,0 +1,16 @@
+{
+  "roof-fusion/fusion.py": "faf8d9dffe98fccbda56528f7efabc3a8c8e3efae7886cfad1c97aec644644b2",
+  "google-cleanup/cleanup.py": "ccb8c14493975a9a2168c4bc47e34c60b11c67a7af4a76217cd966c64196a939",
+  "roofmapnet-trial/cache/weight-response": "f248163e2716d950298c668e2a0a18f293d762084c7d8887bf3369a711768ee4",
+  "roofmapnet-trial/vendor/config/config.yaml": "57934b9d662773ecafb5cfa6a5702d308a244bef9bd4731b3e2ddc2c8b9ae674",
+  "roofmapnet-trial/adapted/roofmapnet/box.py": "561fbe5d3551f60d08b6e56da62104e3978dbd1b860ee73b9f42b32e7a652cad",
+  "roofmapnet-trial/adapted/roofmapnet/config.py": "27c0897eef05a5f9997be724102825879e519189c3a296b7a2e6b69e70a29cd2",
+  "roofmapnet-trial/adapted/roofmapnet/datasets.py": "a74f6b27b9e30bc048548f80ea99602142da5e551d741cb71b160154fe1368af",
+  "roofmapnet-trial/adapted/roofmapnet/metric.py": "d26b76ebd13e6406484158caab09de09aaea5b6a1977fd0af73c71b956a84418",
+  "roofmapnet-trial/adapted/roofmapnet/models/__init__.py": "16505e9e8568d7810c709815952acda60b98d3845ec327cc6e86f0747dc2e36f",
+  "roofmapnet-trial/adapted/roofmapnet/models/detection.py": "93bd8165633707d2b7f78fa6ad5786db3587f055a7e255ac89f3fda43d198a95",
+  "roofmapnet-trial/adapted/roofmapnet/models/hourglass_pose.py": "2b7b60b8bf7640b8c8748a2d3e7887aeee6e44fa856813d29b40ae5389525865",
+  "roofmapnet-trial/adapted/roofmapnet/models/regression.py": "dfb175b6a01d729045ddc764e6bc31b49c00c7b066a2bb549711832b6259321d",
+  "roofmapnet-trial/adapted/roofmapnet/models/roofmapnet.py": "ec64acf2dc5b71832b7ada486583234af29da7d7a1add6e68424703feb83a814",
+  "roofmapnet-trial/adapted/roofmapnet/utils.py": "faca982b4b017adfcba7085e0b346858a0a266e4cfce0ce62c79049f24fe43db"
+}
