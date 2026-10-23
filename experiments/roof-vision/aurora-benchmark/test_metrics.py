@@ -50,6 +50,7 @@ class FaceMatchTests(unittest.TestCase):
         self.assertAlmostEqual(m['face_recall'], 1.)
         self.assertEqual((m['merged_ours'], m['split_aurora'], m['unmatched_ids']), ({}, {}, []))
         self.assertEqual((m['n_aurora'], m['n_aurora_large'], m['n_ours']), (3, 2, 3))
+        self.assertAlmostEqual(m['absorbed_m2'], 0.)
 
     def test_merged_faces_are_detected(self):
         ours = {'m': box(0, 0, 14, 10), 'n': box(14, 0, 15, 2)}
@@ -57,6 +58,7 @@ class FaceMatchTests(unittest.TestCase):
         self.assertEqual(m['merged_ours'], {'m': ['A0', 'A1']})
         self.assertEqual(m['unmatched_ids'], ['A1'])       # 40 / 140 < 0.5
         self.assertAlmostEqual(m['unmatched_area_m2'], 40.)
+        self.assertAlmostEqual(m['absorbed_m2'], 40.)      # A1 is not reproduced, yet 'm' covers all of it
         rows = {r['id']: r for r in m['faces']}
         self.assertAlmostEqual(rows['A0']['best_iou'], 100 / 140)
         self.assertAlmostEqual(rows['A1']['coverage'], 1.)  # covered, but not as its own face
@@ -73,6 +75,14 @@ class FaceMatchTests(unittest.TestCase):
         self.assertAlmostEqual(m['large_area_weighted_best_iou'], 1.)
         self.assertAlmostEqual(m['area_weighted_best_iou'], 140 / 142)
         self.assertAlmostEqual(m['face_recall'], 140 / 142)
+        self.assertAlmostEqual(m['absorbed_m2'], 0.)       # missing and not claimed by anyone else
+
+    def test_partly_claimed_unreproduced_face_counts_only_the_claimed_part(self):
+        aurora = {'A0': box(0, 0, 10, 10), 'A1': box(10, 0, 14, 10)}
+        ours = {'big': box(0, 0, 12, 10)}                  # takes A0 and half of A1
+        m = metrics.match_faces(aurora, ours)
+        self.assertEqual(m['unmatched_ids'], ['A1'])
+        self.assertAlmostEqual(m['absorbed_m2'], 20.)
 
     def test_no_faces_of_ours(self):
         m = metrics.match_faces(self.AURORA, {})

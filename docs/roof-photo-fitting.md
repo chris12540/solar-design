@@ -11,6 +11,12 @@ Scope: one-house experimental proof before neighborhood-scale use. No AHJ setbac
 - Image contrast can adjust proposed lines only within a bounded search and only while plane-height consistency remains acceptable. Contrast is not semantic roof-edge detection: shadows and tile patterns remain limitations.
 - Report coverage, outline intersection-over-union, height residual, overlap, outline displacement and photo contrast support. Numeric checks are development diagnostics, not validated acceptance criteria. Every result remains design_ready=false.
 
+## Unmodeled regions (fit-3)
+
+A face never claims pixels its own plane does not explain. After cells are assigned, each face is checked against the DSM: connected areas of at least 0.5 m2 that sit more than 0.35 m off the face's plane (after ignoring seam-width noise) are cut out and reported in `unmodeled_regions`, each with its area, mean and maximum residual, and a kind: `raised` (at least 0.5 m above the plane), `recessed` (at least 0.5 m below) or `uneven`. They count against `coverage_fraction`, and `height_rmse_m` is measured over the faces as emitted. If more than 40% of a face would be cut, nothing is cut and the height error stays visible instead.
+
+This is not classification. A raised region can be a roof section, a chimney or a tree; a recessed one can be a hip or valley the plane does not cover. Vents and similar objects under about 0.5 m are not visible in a 10 cm DSM and are not detected.
+
 ## Cost and failure handling
 
 One authorized Data Layers request was used for the sample upgrade; no new Building Insights requests. No retry loop. Optional RGB failure retains acquired DSM/mask inputs. All later fitting checks run on saved bytes. Original sample expiry remains unchanged.

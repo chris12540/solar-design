@@ -23,6 +23,7 @@ GATES = (
     ('stages.fitted.area_weighted_best_iou', 'higher', .02),
     ('stages.fitted.face_recall', 'higher', .02),
     ('stages.fitted.large_area_weighted_best_iou', 'higher', .02),
+    ('stages.fitted.absorbed_m2', 'lower', .5),
     ('obstructions.recall', 'higher', 0.),
     ('obstructions.false_positives', 'lower', 0),
     ('orientation.fitted.azimuth_within_tol', 'higher', .02),

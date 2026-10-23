@@ -14,7 +14,7 @@ from shapely.ops import unary_union
 from backend.roof_fitting import _shift_photo, fit
 
 
-def _fixture(hole=False, obstruction=False, bad_height=False, separate=False):
+def _fixture(hole=False, obstruction=False, bad_height=False, separate=False, block=False):
     transform = Affine(.1, 0, 500000-10, 0, -.1, 4400000+10)
     lon, lat = Transformer.from_crs('EPSG:32613', 'EPSG:4326', always_xy=True).transform(500000, 4400000)
     rows, cols = np.indices((200, 200))
@@ -22,6 +22,10 @@ def _fixture(hole=False, obstruction=False, bad_height=False, separate=False):
     data = (10-.3*np.abs(x)).astype('float32')
     if bad_height:
         data += 4
+    if block:
+        # A 2 x 2.5 m section 1 m above the right plane that the raw face polygon still claims.
+        y = 10-(rows+.5)*.1
+        data[(x >= 3) & (x <= 5) & (y >= 2) & (y <= 4.5)] += 1.
     def tif(array):
         stream = BytesIO()
         with rasterio.open(stream, 'w', driver='GTiff', width=200, height=200, count=1,
@@ -158,3 +162,67 @@ def test_contact_lines_skip_accepted_distant_and_brief_contacts():
 def test_retention_flags_groups_that_kept_under_half_their_source_region():
     from backend.roof_fitting import _retention
     assert _retention([12.5, 80., 0.], [1.1, 95., 0.]) == pytest.approx([1.1 / 12.5, 95 / 80., 1.])
+
+
+def _plane_grid(n=100, a=.3, c=10.):
+    from rasterio import Affine as A
+    transform = A(.1, 0, 0, 0, -.1, n*.1)
+    rows, cols = np.indices((n, n))
+    xx, yy = (cols+.5)*.1, n*.1-(rows+.5)*.1
+    return transform, xx, yy, (a*xx + c).astype('float64'), np.ones((n, n), dtype=bool)
+
+
+def _carve(data_edit, shape=None, valid_edit=None):
+    from backend.roof_fitting import _carve_unmodeled
+    transform, xx, yy, data, valid = _plane_grid()
+    data_edit(data, xx, yy)
+    if valid_edit:
+        valid_edit(valid, xx, yy)
+    return _carve_unmodeled(shape or box(0, 0, 10, 10), (.3, 0., 10.), (data, valid, transform), xx, yy)
+
+
+def test_carve_removes_a_raised_section_the_plane_does_not_explain():
+    shape, regions = _carve(lambda d, x, y: d.__setitem__((x > 4) & (x < 6) & (y > 4) & (y < 6.5), d[(x > 4) & (x < 6) & (y > 4) & (y < 6.5)] + 1.))
+    assert shape.area == pytest.approx(100-5, abs=.3)
+    assert len(regions) == 1
+    assert regions[0]['kind'] == 'raised'
+    assert regions[0]['area_m2'] == pytest.approx(5, abs=.3)
+    assert regions[0]['mean_residual_m'] == pytest.approx(1, abs=.01)
+
+
+def test_carve_labels_a_recess_and_ignores_small_noisy_and_nodata_areas():
+    def edit(d, x, y, delta, x0, x1, y0, y1):
+        m = (x > x0) & (x < x1) & (y > y0) & (y < y1)
+        d[m] = d[m] + delta
+    shape, regions = _carve(lambda d, x, y: edit(d, x, y, -1., 4, 6, 4, 6.5))
+    assert [r['kind'] for r in regions] == ['recessed']
+    for small in (lambda d, x, y: edit(d, x, y, 1., 4, 4.5, 4, 4.5),           # 0.25 m2 bump
+                  lambda d, x, y: edit(d, x, y, .2, 1, 9, 1, 9),               # large area, within limit
+                  lambda d, x, y: edit(d, x, y, 1., 1, 9, 5, 5.12)):           # one-pixel seam
+        shape, regions = _carve(small)
+        assert regions == [] and shape.area == pytest.approx(100)
+    def raised(d, x, y): edit(d, x, y, 1., 4, 6, 4, 6.5)
+    shape, regions = _carve(raised, valid_edit=lambda v, x, y: v.__setitem__((x > 4) & (x < 6) & (y > 4) & (y < 6.5), False))
+    assert regions == []                                                          # no height data there, nothing to judge
+
+
+def test_carve_declines_when_most_of_the_face_is_unexplained():
+    shape, regions = _carve(lambda d, x, y: d.__setitem__(slice(None), d + 1.))
+    assert regions == [] and shape.area == pytest.approx(100)
+
+
+def test_fit_does_not_claim_pixels_its_plane_does_not_explain():
+    clean_raw, clean_inputs = _fixture()
+    clean = fit(clean_raw, clean_inputs, {})
+    assert clean['unmodeled_regions'] == [] and clean['quality']['unmodeled_area_m2'] == 0
+    raw, inputs = _fixture(block=True)
+    result = fit(raw, inputs, {})
+    roof = unary_union(_shapes(result))
+    assert roof.intersection(box(3.1, 2.1, 4.9, 4.4)).area < .05
+    assert roof.area == pytest.approx(unary_union(_shapes(clean)).area-5, abs=.5)
+    assert len(result['unmodeled_regions']) == 1
+    region = result['unmodeled_regions'][0]
+    assert region['kind'] == 'raised' and region['area_m2'] == pytest.approx(5, abs=.4)
+    assert result['quality']['unmodeled_area_m2'] == pytest.approx(5, abs=.4)
+    assert result['quality']['height_rmse_m'] < .05
+    assert any('unmodeled' in w.lower() for w in result['warnings'])

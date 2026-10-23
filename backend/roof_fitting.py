@@ -3,7 +3,8 @@
 The source reconstruction is never edited. A line arrangement gives every face
 one shared topology; plane intersections are preferred over raster stair steps.
 Photo gradients can move a proposed line only inside its geometric uncertainty.
-They never supply height or authorize a roof outside DSM support.
+They never supply height or authorize a roof outside DSM support. A face never
+claims pixels its own plane does not explain; those become unmodeled regions.
 """
 from __future__ import annotations
 
@@ -13,21 +14,27 @@ from typing import Any
 import numpy as np
 from pyproj import CRS, Transformer
 from rasterio import Affine, band
-from rasterio.features import rasterize
+from rasterio.features import rasterize, shapes
 from rasterio.io import MemoryFile
 from rasterio.windows import from_bounds, Window
 from rasterio.enums import Resampling
 from rasterio.warp import reproject
 from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import shape as geometry_of
 from shapely import union_all
 from shapely.ops import polygonize, unary_union
 
 from .roof_refinement import _model, _poly, _polygons, _record, _plane_intersection, _edge_kind
 
-ALGORITHM_VERSION = "fit-2"
+ALGORITHM_VERSION = "fit-3"
 MAX_FACES = 128
 MAX_CELLS = 4096
 RETENTION_MIN = .5   # a plane group keeping less of its source area than this is reported as degraded
+UNMODELED_RESIDUAL_M = .35   # same limit the raw stage uses to assign a pixel to a plane
+MIN_UNMODELED_M2 = .5
+UNMODELED_OPEN_PX = 1        # opening radius that drops seam noise thinner than this
+KIND_RESIDUAL_M = .5         # mean residual beyond which an unmodeled region is raised or recessed
+MAX_CARVE_FRACTION = .4      # a plane unexplained over more of its area than this is a bad fit, not a few unmodeled regions
 
 
 def _raster(raw, inputs):
@@ -221,14 +228,85 @@ def _retention(source_areas, fitted_areas):
     return [fitted/source if source > 0 else 1. for source, fitted in zip(source_areas, fitted_areas)]
 
 
+def _shift(mask, dy, dx):
+    out = np.zeros_like(mask)
+    h, w = mask.shape
+    out[max(dy, 0):h+min(dy, 0), max(dx, 0):w+min(dx, 0)] = mask[max(-dy, 0):h+min(-dy, 0), max(-dx, 0):w+min(-dx, 0)]
+    return out
+
+
+def _open_mask(mask, radius):
+    """Binary opening with a 3 x 3 element, `radius` times; removes features thinner than 2*radius+1 pixels."""
+    offsets = [(dy, dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1)]
+    for _ in range(radius):
+        mask = mask & np.all([_shift(mask, dy, dx) for dy, dx in offsets], axis=0)
+    for _ in range(radius):
+        mask = mask | np.any([_shift(mask, dy, dx) for dy, dx in offsets], axis=0)
+    return mask
+
+
+def _kind(mean_residual):
+    if mean_residual >= KIND_RESIDUAL_M:
+        return 'raised'
+    return 'recessed' if mean_residual <= -KIND_RESIDUAL_M else 'uneven'
+
+
+def _carve_unmodeled(shape, model, raster, xx, yy):
+    """Remove from `shape` the areas its plane does not explain; return (shape, regions).
+
+    A region is a connected set of valid pixels more than UNMODELED_RESIDUAL_M off the
+    plane (after dropping seam-width noise) and at least MIN_UNMODELED_M2 in area. Without
+    this, a cell that mixes a plane with an adjacent raised section, recess or unmodeled
+    facet gives the whole cell, mixture included, to that plane. If more than
+    MAX_CARVE_FRACTION of the face would go, the plane itself is wrong: nothing is carved
+    and the height error stays visible in the quality figures.
+    """
+    data, valid, transform = raster
+    if shape.is_empty:
+        return shape, []
+    inside = rasterize([(shape, 1)], out_shape=data.shape, transform=transform, dtype='uint8').astype(bool) & valid
+    residual = data - (model[0]*xx + model[1]*yy + model[2])
+    bad = _open_mask(inside & (np.abs(residual) > UNMODELED_RESIDUAL_M), UNMODELED_OPEN_PX)
+    if not bad.any():
+        return shape, []
+    regions = []
+    for geom, _ in shapes(bad.astype('uint8'), mask=bad, transform=transform, connectivity=8):
+        polygon = geometry_of(geom)
+        if polygon.area < MIN_UNMODELED_M2:
+            continue
+        pixels = rasterize([(polygon, 1)], out_shape=data.shape, transform=transform, dtype='uint8').astype(bool) & bad
+        mean = float(np.mean(residual[pixels]))
+        regions.append(dict(geometry=polygon, area_m2=float(polygon.area), pixels=int(pixels.sum()),
+                            mean_residual_m=mean, max_abs_residual_m=float(np.max(np.abs(residual[pixels]))),
+                            kind=_kind(mean)))
+    removed = unary_union([r['geometry'] for r in regions]) if regions else None
+    if removed is None or removed.intersection(shape).area > MAX_CARVE_FRACTION*shape.area:
+        return shape, []
+    return shape.difference(removed), regions
+
+
+def _merge_unmodeled(pieces):
+    """Join regions carved from neighbouring faces into one record per connected area."""
+    if not pieces:
+        return []
+    merged = []
+    for area in _polygons(unary_union([p['geometry'] for p in pieces])):
+        members = [p for p in pieces if p['geometry'].intersects(area)]
+        pixels = sum(p['pixels'] for p in members)
+        mean = sum(p['mean_residual_m']*p['pixels'] for p in members)/pixels
+        merged.append(dict(geometry=area, area_m2=float(area.area), mean_residual_m=mean,
+                           max_abs_residual_m=max(p['max_abs_residual_m'] for p in members), kind=_kind(mean)))
+    return sorted(merged, key=lambda r: -r['area_m2'])
+
+
 def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> dict[str, Any]:
     """Fit an evidence-scored line arrangement in source local projected meters."""
     warnings = []
     result = dict(algorithm_version=ALGORITHM_VERSION, status='unavailable', face_groups=[],
-                  edges=[], warnings=warnings, design_ready=False, quality={
+                  edges=[], unmodeled_regions=[], warnings=warnings, design_ready=False, quality={
                       'coverage_fraction': 0., 'height_rmse_m': None, 'outline_iou': 0.,
                       'max_boundary_deviation_m': 0., 'overlap_area_m2': 0.,
-                      'unexplained_fraction': 1., 'checks_passed': False})
+                      'unexplained_fraction': 1., 'unmodeled_area_m2': 0., 'checks_passed': False})
     if raw.get('status') != 'needs_review':
         warnings.append('A successful raw reconstruction is required for fitting.')
         return result
@@ -349,16 +427,27 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
                 errors.append(float(np.square(residual).sum()))
                 absolute_errors.append(np.abs(residual))
                 sampled += len(residual)
-        emitted, degraded = [], []
+        emitted, degraded, carved = [], [], []
+        # Height error is measured over the faces as emitted, after unexplained areas are carved out.
+        errors, absolute_errors, sampled = [], [], 0
         for index, group in enumerate(groups):
             # Zero-tolerance removes only redundant collinear nodes; independent
             # positive-tolerance simplification would tear shared topology.
             shape = unary_union(assigned[index]).simplify(1e-9, preserve_topology=True)
+            shape, regions = _carve_unmodeled(shape, models[index], raster, xx, yy)
+            carved += regions
             parts = _polygons(shape)
             if not parts:
                 continue
             representative = faces[group[0]]
             emitted.append(shape)
+            face_pixels = rasterize([(shape, 1)], out_shape=data.shape, transform=transform, dtype='uint8').astype(bool) & valid
+            if face_pixels.any():
+                m = models[index]
+                residual = data[face_pixels]-(m[0]*xx[face_pixels]+m[1]*yy[face_pixels]+m[2])
+                errors.append(float(np.square(residual).sum()))
+                absolute_errors.append(np.abs(residual))
+                sampled += len(residual)
             retained = _retention([sources[index].area], [shape.area])[0]
             if retained < RETENTION_MIN:
                 degraded += [str(faces[i].get('source_plane_id', faces[i].get('id', f'plane-{i+1}'))) for i in group]
@@ -415,7 +504,14 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
                     hits.append(photo['gradient'][row, col] >= .04)
             if hits:
                 photo_support = float(np.mean(hits))
+        unmodeled = _merge_unmodeled(carved)
+        unmodeled_area = sum(r['area_m2'] for r in unmodeled)
+        result['unmodeled_regions'] = [
+            dict(id=f'unmodeled-{k+1}', **_record(r['geometry']), area_m2=r['area_m2'], kind=r['kind'],
+                 mean_residual_m=r['mean_residual_m'], max_abs_residual_m=r['max_abs_residual_m'])
+            for k, r in enumerate(unmodeled)]
         result['quality'].update(coverage_fraction=coverage, height_rmse_m=rmse, outline_iou=iou,
+                                 unmodeled_area_m2=unmodeled_area, unmodeled_fraction=unmodeled_area/outline.area,
                                  max_boundary_deviation_m=deviation, overlap_area_m2=max(0., overlap),
                                  unexplained_fraction=max(0., 1-coverage),
                                  height_median_absolute_error_m=float(np.median(absolutes)) if absolutes is not None else None,
@@ -442,6 +538,10 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
             warnings.append('Some source planes were not retained by the fitted topology: '+', '.join(missing_planes)+'. Their connections remain unresolved.')
         if degraded:
             warnings.append('Some source planes kept under half of their original area after fitting: '+', '.join(degraded)+'. Their regions may have been assigned to a neighboring plane.')
+        if unmodeled:
+            kinds = ', '.join(sorted({r['kind'] for r in unmodeled}))
+            warnings.append(f'{len(unmodeled)} unmodeled roof region(s) totalling {unmodeled_area:.1f} m2 ({kinds}) were left out of the faces: '
+                            f'the DSM there is more than {UNMODELED_RESIDUAL_M} m off the neighboring plane. They may be raised sections, objects or facets that are not modeled.')
         if rmse is None or rmse > .35:
             warnings.append(f'Height fit failed the development check (RMSE {rmse:.2f} m; limit 0.35 m).' if rmse is not None else 'Height fit could not be measured.')
         warnings.append('Experimental automatic fitting requires roof and obstruction review; design validation has not passed.')

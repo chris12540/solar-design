@@ -95,6 +95,9 @@ def match_faces(aurora, ours, small_m2=SMALL_M2, match_iou=MATCH_IOU, span_frac=
             'large_area_weighted_best_iou': sum(r['best_iou'] * r['area_m2'] for r in large) / large_total,
             'face_recall': 1 - sum(r['area_m2'] for r in unmatched) / total,
             'unmatched_area_m2': sum(r['area_m2'] for r in unmatched),
+            # Area of Aurora faces we did not reproduce that our faces nevertheless cover: it is
+            # being claimed by a neighbouring face instead of being left unmodeled.
+            'absorbed_m2': sum(r['area_m2'] * r['coverage'] for r in unmatched),
             'unmatched_ids': [r['id'] for r in unmatched],
             'merged_ours': {oid: ids for oid, ids in spans.items() if len(ids) >= 2},
             'split_aurora': {aid: ids for aid, ids in splits.items() if len(ids) >= 2}}
