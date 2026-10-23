@@ -306,3 +306,114 @@ def test_hip_roof_keeps_four_faces_with_straight_hips():
     assert result['quality']['height_rmse_m'] < .05
     assert result['quality']['coverage_fraction'] > .95
     assert result['unmodeled_regions'] == []
+
+
+def _blur(array, radius=2):
+    """Box blur, to give synthetic heights the smoothness of a real 10 cm DSM."""
+    k = 2*radius+1
+    padded = np.pad(array, radius, mode='edge')
+    total = np.zeros(array.shape, dtype=float)
+    for dy in range(k):
+        for dx in range(k):
+            total += padded[dy:dy+array.shape[0], dx:dx+array.shape[1]]
+    return total/(k*k)
+
+
+def test_local_slope_recovers_a_plane_in_either_raster_orientation():
+    from backend.roof_fitting import _local_slope
+    n = 60
+    rows, cols = np.indices((n, n))
+    for transform in (Affine(.1, 0, 0, 0, -.1, 6), Affine(.1, 0, 0, 0, .1, 0)):    # north-up, and rows running north
+        x = transform.a*(cols+.5)+transform.b*(rows+.5)+transform.c
+        y = transform.d*(cols+.5)+transform.e*(rows+.5)+transform.f
+        east, north = _local_slope((10+.3*x-.2*y), np.ones((n, n), bool), transform, 2)
+        assert np.nanmedian(east) == pytest.approx(.3, abs=1e-6)
+        assert np.nanmedian(north) == pytest.approx(-.2, abs=1e-6)
+    valid = np.ones((n, n), bool)
+    valid[:, :30] = False
+    east, _ = _local_slope(10+.3*x, valid, transform, 2)
+    assert np.isnan(east[:, :20]).all() and not np.isnan(east[:, 40:55]).any()      # no data, no slope
+
+
+def _tilt_case(patch=(4, 4, 7.5, 5.2), slope=.55, noise=0., owner_size=10):
+    """A flat 10 x 10 m face with one patch whose tilt is clearly different but whose heights stay within 0.3 m."""
+    from backend.roof_fitting import _carve_tilt
+    transform, xx, yy, data, valid = _plane_grid(a=0.)
+    x0, y0, x1, y1 = patch
+    inside = (xx > x0) & (xx < x1) & (yy > y0) & (yy < y1)
+    data = data.copy()
+    data[inside] += slope*(yy[inside]-(y0+y1)/2)
+    if noise:
+        data += np.random.default_rng(0).normal(0, noise, data.shape)
+    shape, regions = _carve_tilt([box(0, 0, owner_size, owner_size)], [(0., 0., 10.)], (data, valid, transform), xx, yy)
+    return shape[0], regions
+
+
+def test_carve_tilt_cuts_out_a_compact_coherent_tilt_change():
+    shape, regions = _tilt_case()
+    assert len(regions) == 1 and regions[0]['kind'] == 'tilt'
+    assert 2. < regions[0]['area_m2'] < 7.
+    assert shape.area == pytest.approx(100-regions[0]['area_m2'], abs=.3)
+    assert shape.intersection(box(4.6, 4.2, 6.9, 5.0)).area < .5                  # the patch's core is no longer claimed
+
+
+def test_carve_tilt_refuses_what_is_not_a_hip():
+    for case, kwargs in (('thin band like a smoothed crease', dict(patch=(2, 4.5, 9, 4.9))),
+                         ('too steep to be a roof facet', dict(patch=(4, 4, 7.5, 5.2), slope=1.6)),
+                         ('too small', dict(patch=(4, 4, 4.8, 4.8))),
+                         ('same tilt as its face (nothing to find)', dict(slope=0.)),
+                         ('height noise only', dict(slope=0., noise=.02))):
+        shape, regions = _tilt_case(**kwargs)
+        assert regions == [] and shape.area == pytest.approx(100), case
+
+
+def _flat_roof_with_tilted_patch():
+    """One flat 12 x 8 m face; a 3.5 x 1.2 m patch inside it tilts 0.55 but never leaves the plane by more than 0.33 m."""
+    transform = Affine(.1, 0, 500000-10, 0, -.1, 4400000+10)
+    lon, lat = Transformer.from_crs('EPSG:32613', 'EPSG:4326', always_xy=True).transform(500000, 4400000)
+    rows, cols = np.indices((200, 200))
+    x, y = (cols+.5)*.1-10, 10-(rows+.5)*.1
+    data = np.full((200, 200), 10.)
+    patch = (x > -1.5) & (x < 2) & (y > -3.6) & (y < -2.4)
+    data[patch] += .55*(y[patch]+3.)
+    data = _blur(data, 1)
+    def tif(array):
+        stream = BytesIO()
+        with rasterio.open(stream, 'w', driver='GTiff', width=200, height=200, count=1, dtype=array.dtype,
+                           crs='EPSG:32613', transform=transform) as ds:
+            ds.write(array, 1)
+        return stream.getvalue()
+    def record(p):
+        return {'polygon': list(p.exterior.coords), 'holes': []}
+    outline = box(-6, -4, 6, 4)
+    face = dict(record(outline), id='face', source_plane_id='plane-1', plane_model=dict(a=0, b=0, c=10),
+                pitch_degrees=0., azimuth_degrees=0., fit_rmse_m=.02)
+    raw = dict(status='needs_review', origin=dict(latitude=lat, longitude=lon, crs='EPSG:32613'),
+               roof_outline=record(outline), faces=[face], quality={'pixel_size_m': .1}, obstruction_candidates=[])
+    return raw, dict(dsm=tif(data.astype('float32')), mask=tif(np.where((np.abs(x) <= 6) & (np.abs(y) <= 4), 1, 0).astype('uint8')))
+
+
+def test_fit_leaves_a_hip_sized_tilt_change_unmodeled():
+    raw, inputs = _flat_roof_with_tilted_patch()
+    result = fit(raw, inputs, {})
+    assert result['status'] == 'experimental'
+    roof = unary_union(_shapes(result))
+    assert roof.intersection(box(-1., -3.4, 1.5, -2.6)).area < 1.0                 # the patch core is not claimed by the flat face
+    kinds = [r['kind'] for r in result['unmodeled_regions']]
+    assert 'tilt' in kinds
+    assert result['quality']['unmodeled_area_m2'] > 1.5
+
+
+def test_smoothed_hip_roof_creases_are_not_taken_for_facets():
+    raw, inputs = _hip_roof()
+    with rasterio.open(BytesIO(inputs['dsm'])) as src:
+        data, transform = src.read(1).astype('float64'), src.transform
+    smooth = _blur(data, 2)
+    stream = BytesIO()
+    with rasterio.open(stream, 'w', driver='GTiff', width=200, height=200, count=1, dtype='float32',
+                       crs='EPSG:32613', transform=transform) as ds:
+        ds.write(smooth.astype('float32'), 1)
+    inputs = dict(inputs, dsm=stream.getvalue())
+    result = fit(raw, inputs, {})
+    assert [r for r in result['unmodeled_regions'] if r['kind'] == 'tilt'] == []
+    assert len(result['face_groups']) == 4

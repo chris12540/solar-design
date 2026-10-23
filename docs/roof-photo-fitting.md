@@ -19,9 +19,15 @@ Lines that no longer span the roof do not close every cell, so a cell can hold p
 
 ## Unmodeled regions (fit-3)
 
-A face never claims pixels its own plane does not explain. After cells are assigned, each face is checked against the DSM: connected areas of at least 0.5 m2 that sit more than 0.35 m off the face's plane (after ignoring seam-width noise) are cut out and reported in `unmodeled_regions`, each with its area, mean and maximum residual, and a kind: `raised` (at least 0.5 m above the plane), `recessed` (at least 0.5 m below) or `uneven`. They count against `coverage_fraction`, and `height_rmse_m` is measured over the faces as emitted. If more than 40% of a face would be cut, nothing is cut and the height error stays visible instead.
+A face never claims pixels its own plane does not explain. After cells are assigned, each face is checked against the DSM: connected areas of at least 0.5 m2 that sit more than 0.35 m off the face's plane (after ignoring seam-width noise) are cut out and reported in `unmodeled_regions`, each with its area, mean and maximum residual, and a kind: `raised` (at least 0.5 m above the plane), `recessed` (at least 0.5 m below), `uneven`, or `tilt` (see below). They count against `coverage_fraction`, and `height_rmse_m` is measured over the faces as emitted. If more than 40% of a face would be cut, nothing is cut and the height error stays visible instead.
 
 This is not classification. A raised region can be a roof section, a chimney or a tree; a recessed one can be a hip or valley the plane does not cover. Vents and similar objects under about 0.5 m are not visible in a 10 cm DSM and are not detected.
+
+## Tilt regions (fit-5)
+
+A hip or small facet beside larger faces fits their planes to within about 10 cm, so the height test above never sees it; the faces swallow it. Its slope is different, though. The local slope (a least-squares plane over a 5 x 5 pixel window) is compared with the slope of the face that owns each pixel. A region needs a seed: a patch of at least 0.5 m2 and 0.6 m wide where the slope differs from the owner's by more than 0.5, with a coherent direction (median spread at most 0.4) and a plausible pitch (8 to 45 degrees). The width rule keeps smoothed creases, which are long thin bands, out. A seed grows over nearby pixels that differ by more than 0.3, and the result is cut out of the faces and reported as an unmodeled region of kind `tilt`. If more than 15% of the roof would be cut this way the height model is treated as unreliable and nothing is cut.
+
+These are reported as unmodeled, not as faces. In Google's height model a 2 m hip never forms a clean plane (a plane fitted to a seed explains almost nothing beyond it), so a face would need an invented plane. Likewise, a ring around a flat roof that an Aurora design draws as a separate face is coplanar with the roof in the heights and is not separated.
 
 ## Cost and failure handling
 

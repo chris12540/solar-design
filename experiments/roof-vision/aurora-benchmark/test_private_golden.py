@@ -17,7 +17,7 @@ HOUSES = sorted(p for p in PRIVATE.glob('*/') if (p / 'design.dxf').exists() and
 
 
 RAW_TOLERANCE = .03   # fitting may not leave large faces this far below the raw stage it starts from
-MAX_ABSORBED_FRACTION = .05   # share of the roof: unreproduced Aurora faces swallowed by neighbouring faces (original fit-1: 7.6%)
+MAX_ABSORBED_FRACTION = .03   # share of the roof: unreproduced Aurora faces swallowed by neighbouring faces (fit-1: 7.6%, fit-4: 4.1% on the human design)
 LARGE_FACE_M2 = 10.   # a face this big that is not reproduced at IoU >= 0.5 is a defect, not noise
 
 

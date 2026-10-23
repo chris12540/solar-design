@@ -26,7 +26,7 @@ from shapely.ops import polygonize, unary_union
 
 from .roof_refinement import _model, _poly, _polygons, _record, _plane_intersection, _edge_kind
 
-ALGORITHM_VERSION = "fit-4"
+ALGORITHM_VERSION = "fit-5"
 MAX_FACES = 128
 MAX_CELLS = 4096
 RETENTION_MIN = .5   # a plane group keeping less of its source area than this is reported as degraded
@@ -38,6 +38,16 @@ RIDGE_REACH_M = 1.5          # how far past its supported span a ridge may run t
 MIXED_CELL_M2 = .5           # a cell is mixed when two sources each have at least this much in it ...
 MIXED_SHARE = .15            # ... and at least this share of their own area (a sliver of a big face is just edge noise)
 PIECE_FLOOR_M2 = .1          # smallest source overlap that becomes its own piece
+SLOPE_RADIUS_PX = 2          # local slope is a least-squares plane over a (2r+1)^2 pixel window
+TILT_SEED_GAP = .5           # slope vector differing from the owning face by more than this seeds a tilt region ...
+TILT_GROW_GAP = .3           # ... which then grows over pixels differing by more than this
+TILT_MAX_DISPERSION = .4     # a real facet has one coherent slope; a smoothed crease blends many
+TILT_PITCH_DEG = (8., 45.)   # slope of a plausible facet
+TILT_MIN_SEED_M2 = .5
+TILT_MIN_WIDTH_M = .6        # smoothed creases are long bands only a few pixels wide
+TILT_MIN_REGION_M2 = .8
+TILT_REACH_M = 1.            # how far from its seed a tilt region may grow
+TILT_MAX_TOTAL_FRACTION = .15  # more than this carved as tilt means the height model is unreliable
 MAX_CARVE_FRACTION = .4      # a plane unexplained over more of its area than this is a bad fit, not a few unmodeled regions
 
 
@@ -344,6 +354,100 @@ def _carve_unmodeled(shape, model, raster, xx, yy):
     return shape.difference(removed), regions
 
 
+def _box_sum(a, r):
+    """Sum over every (2r+1) x (2r+1) window of `a` (valid positions only)."""
+    k = 2*r+1
+    c = np.cumsum(np.cumsum(np.pad(a, ((r+1, r), (r+1, r))), 0), 1)
+    return c[k:, k:]-c[:-k, k:]-c[k:, :-k]+c[:-k, :-k]
+
+
+def _local_slope(data, valid, transform, radius):
+    """Surface slope (east, north), as rise per metre, from a least-squares plane in a window around each pixel.
+
+    NaN where the window holds too little height data.
+    """
+    v = valid.astype(float)
+    z = np.where(valid, data, 0.).astype(float)
+    rows, cols = (g.astype(float) for g in np.indices(data.shape))
+    n = _box_sum(v, radius)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        mean = lambda q: _box_sum(v*q, radius)/n
+        mc, mr, mz = mean(cols), mean(rows), mean(z)
+        d_col = (mean(cols*z)-mc*mz)/(mean(cols*cols)-mc*mc)       # rise per pixel along columns
+        d_row = (mean(rows*z)-mr*mz)/(mean(rows*rows)-mr*mr)
+        det = transform.a*transform.e-transform.b*transform.d
+        east = (d_col*transform.e-d_row*transform.d)/det           # solve [[a, d], [b, e]] . (east, north) = (d_col, d_row)
+        north = (d_row*transform.a-d_col*transform.b)/det
+    thin = n < .6*(2*radius+1)**2
+    return np.where(thin, np.nan, east), np.where(thin, np.nan, north)
+
+
+def _carve_tilt(shapes_, models_, raster, xx, yy):
+    """Cut out compact areas whose slope disagrees with the face that owns them; return (shapes, regions).
+
+    A hip or small facet next to larger faces fits their planes to within about 10 cm, so no
+    height test sees it, but its tilt is plainly different, and in the smoothed height model that
+    survives as one coherent slope. A region needs a seed (slope far from the owner, coherent, a
+    plausible pitch, wide enough not to be a smoothed crease) and grows over pixels that also
+    disagree. The result is reported as unmodeled, not as a face: the height model is too smooth to
+    give such a facet a trustworthy plane.
+    """
+    data, valid, transform = raster
+    east, north = _local_slope(data, valid, transform, SLOPE_RADIUS_PX)
+    known = ~np.isnan(east)
+    owner = np.full(data.shape, -1)
+    gap = np.zeros(data.shape)
+    owner_height = np.zeros(data.shape)
+    for index, (shape, model) in enumerate(zip(shapes_, models_)):
+        if shape.is_empty:
+            continue
+        mask = rasterize([(shape, 1)], out_shape=data.shape, transform=transform, dtype='uint8').astype(bool) & valid
+        owner[mask] = index
+        owner_height[mask] = (model[0]*xx+model[1]*yy+model[2])[mask]
+        use = mask & known
+        gap[use] = np.hypot(east[use]-model[0], north[use]-model[1])
+    owned = owner >= 0
+    seeds = _open_mask((gap > TILT_SEED_GAP) & owned, 1)
+    grown = _open_mask((gap > TILT_GROW_GAP) & owned, 1)
+    regions = []
+    for geometry, _ in shapes(seeds.astype('uint8'), mask=seeds, transform=transform, connectivity=8):
+        seed = geometry_of(geometry)
+        if seed.area < TILT_MIN_SEED_M2:
+            continue
+        rectangle = seed.minimum_rotated_rectangle
+        if rectangle.geom_type != 'Polygon':
+            continue
+        corners = list(rectangle.exterior.coords)
+        if min(math.dist(corners[0], corners[1]), math.dist(corners[1], corners[2])) < TILT_MIN_WIDTH_M:
+            continue
+        pixels = rasterize([(seed, 1)], out_shape=data.shape, transform=transform, dtype='uint8').astype(bool) & seeds & known
+        if not pixels.any():
+            continue
+        mid_e, mid_n = np.median(east[pixels]), np.median(north[pixels])
+        dispersion = float(np.median(np.hypot(east[pixels]-mid_e, north[pixels]-mid_n)))
+        pitch = math.degrees(math.atan(math.hypot(mid_e, mid_n)))
+        if dispersion > TILT_MAX_DISPERSION or not TILT_PITCH_DEG[0] <= pitch <= TILT_PITCH_DEG[1]:
+            continue
+        near = rasterize([(seed.buffer(TILT_REACH_M), 1)], out_shape=data.shape, transform=transform, dtype='uint8').astype(bool)
+        region = None
+        for geometry, _ in shapes((grown & near).astype('uint8'), mask=grown & near, transform=transform, connectivity=8):
+            piece = geometry_of(geometry)
+            if piece.intersects(seed):
+                region = piece if region is None else region.union(piece)
+        if region is None or region.area < TILT_MIN_REGION_M2:
+            continue
+        inside = rasterize([(region, 1)], out_shape=data.shape, transform=transform, dtype='uint8').astype(bool) & owned
+        offset = (data-owner_height)[inside]
+        regions.append(dict(geometry=region, area_m2=float(region.area), pixels=int(inside.sum()),
+                            mean_residual_m=float(np.mean(offset)), max_abs_residual_m=float(np.max(np.abs(offset))), kind='tilt'))
+    if not regions:
+        return list(shapes_), []
+    cut = unary_union([r['geometry'] for r in regions])
+    if cut.intersection(unary_union(list(shapes_))).area > TILT_MAX_TOTAL_FRACTION*sum(s.area for s in shapes_):
+        return list(shapes_), []
+    return [s.difference(cut) for s in shapes_], regions
+
+
 def _merge_unmodeled(pieces):
     """Join regions carved from neighbouring faces into one record per connected area."""
     if not pieces:
@@ -353,8 +457,10 @@ def _merge_unmodeled(pieces):
         members = [p for p in pieces if p['geometry'].intersects(area)]
         pixels = sum(p['pixels'] for p in members)
         mean = sum(p['mean_residual_m']*p['pixels'] for p in members)/pixels
+        tilted = sum(p['area_m2'] for p in members if p['kind'] == 'tilt')
+        kind = 'tilt' if tilted >= .5*sum(p['area_m2'] for p in members) else _kind(mean)
         merged.append(dict(geometry=area, area_m2=float(area.area), mean_residual_m=mean,
-                           max_abs_residual_m=max(p['max_abs_residual_m'] for p in members), kind=_kind(mean)))
+                           max_abs_residual_m=max(p['max_abs_residual_m'] for p in members), kind=kind))
     return sorted(merged, key=lambda r: -r['area_m2'])
 
 
@@ -491,14 +597,22 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
                 absolute_errors.append(np.abs(residual))
                 sampled += len(residual)
         emitted, degraded, carved = [], [], []
-        # Height error is measured over the faces as emitted, after unexplained areas are carved out.
-        errors, absolute_errors, sampled = [], [], 0
+        # Pass one: each face as the cells gave it, minus areas its own plane cannot explain by height.
+        drafts = []
         for index, group in enumerate(groups):
             # Zero-tolerance removes only redundant collinear nodes; independent
             # positive-tolerance simplification would tear shared topology.
             shape = unary_union(assigned[index]).simplify(1e-9, preserve_topology=True)
             shape, regions = _carve_unmodeled(shape, models[index], raster, xx, yy)
             carved += regions
+            if _polygons(shape):
+                drafts.append((index, group, shape))
+        # Pass two: then minus areas whose tilt, not height, says they are a different facet.
+        finals, tilt_regions = _carve_tilt([d[2] for d in drafts], [models[d[0]] for d in drafts], raster, xx, yy)
+        carved += tilt_regions
+        # Height error is measured over the faces as emitted, after unexplained areas are carved out.
+        errors, absolute_errors, sampled = [], [], 0
+        for (index, group, _), shape in zip(drafts, finals):
             parts = _polygons(shape)
             if not parts:
                 continue
