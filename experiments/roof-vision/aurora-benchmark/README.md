@@ -48,6 +48,7 @@ The repository is public. `private/` is git-ignored and holds, per house: `desig
 
 ## Known limits
 
+- Only the largest connected structure in the DXF is scored as the roof (designs often include neighbouring roofs for shading); `--all-structures` keeps everything. The ignored area is listed in `meta.dxf.warnings`.
 - DXF face polygons come from noding the `Buildings` lines. Sliver faces under 0.05 m2 are dropped. A DXF whose roof lines do not close will give fewer faces; check `meta.dxf.warnings`.
 - The DXF carries no azimuth, pitch or heights. Orientation scoring needs a separate reference. The `--reference` file format (`{"A0": {"azimuth_deg": .., "pitch_deg": ..}}`) is provisional until Aurora's per-face export is available.
 - Only the `Buildings`, `Modules` and `Obstructions` layers are used. `Setbacks`, `Fire_Pathways` and `Property_Lines` are counted but not scored yet.

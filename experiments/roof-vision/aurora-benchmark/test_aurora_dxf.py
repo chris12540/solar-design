@@ -72,6 +72,21 @@ class DxfReaderTests(unittest.TestCase):
         self.assertEqual(len(design.faces), 0)
         self.assertTrue(any('no roof faces' in w for w in design.warnings))
 
+    def test_neighbouring_structures_are_ignored_by_default(self):
+        neighbour = ring_lines(rect(100, 0, 110, 20)) + [((100, 10), (110, 10))]    # 200 ft2, far from the house
+        design = aurora_dxf.parse(dxf_text(buildings=GABLE + neighbour))
+        self.assertEqual(len(design.faces), 2)
+        self.assertAlmostEqual(design.roof_outline.area, 1200 * FT2, delta=.1)
+        self.assertTrue(any('other structure' in w for w in design.warnings))
+        everything = aurora_dxf.parse(dxf_text(buildings=GABLE + neighbour), primary_only=False)
+        self.assertEqual(len(everything.faces), 4)
+
+    def test_faces_of_one_building_are_never_split_apart(self):
+        for lines, count in ((GABLE, 2), (HIP, 4)):
+            design = aurora_dxf.parse(dxf_text(buildings=lines))
+            self.assertEqual(len(design.faces), count)
+            self.assertFalse(any('other structure' in w for w in design.warnings))
+
     def test_file_size_guard(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'a.dxf'

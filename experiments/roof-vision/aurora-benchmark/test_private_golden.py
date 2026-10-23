@@ -16,7 +16,7 @@ PRIVATE = Path(__file__).parent / 'private'
 HOUSES = sorted(p for p in PRIVATE.glob('*/') if (p / 'design.dxf').exists() and (p / 'result.json').exists())
 
 
-MAX_ABSORBED_M2 = 8.   # unreproduced Aurora faces may not be swallowed by neighbouring faces beyond this
+MAX_ABSORBED_FRACTION = .05   # share of the roof: unreproduced Aurora faces swallowed by neighbouring faces (original fit-1: 7.6%)
 LARGE_FACE_M2 = 10.   # a face this big that is not reproduced at IoU >= 0.5 is a defect, not noise
 
 
@@ -51,8 +51,9 @@ class PrivateGoldenTests(unittest.TestCase):
     def test_fitted_faces_do_not_swallow_unmodeled_areas(self):
         for house in HOUSES:
             with self.subTest(house=house.name):
-                absorbed = _scored(house)['stages']['fitted']['absorbed_m2']
-                self.assertLessEqual(absorbed, MAX_ABSORBED_M2, 'fitted faces claim area that no fitted plane explains')
+                report = _scored(house)
+                share = report['stages']['fitted']['absorbed_m2'] / report['outline']['aurora_area_m2']
+                self.assertLessEqual(share, MAX_ABSORBED_FRACTION, 'fitted faces claim area that no fitted plane explains')
 
 
 if __name__ == '__main__':

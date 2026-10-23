@@ -128,8 +128,26 @@ def _modules(lines, warnings):
     return mods
 
 
-def parse(text, units=None):
-    """Parse DXF text. `units` (metres per drawing unit) overrides $INSUNITS."""
+def _primary_building(faces, warnings, join=.15):
+    """Keep the faces of the largest connected structure; designs often include neighbouring roofs for shading."""
+    if len(faces) < 2:
+        return faces
+    joined = unary_union([f.buffer(join) for f in faces])
+    parts = list(joined.geoms) if hasattr(joined, 'geoms') else [joined]
+    if len(parts) < 2:
+        return faces
+    owner = [next(i for i, p in enumerate(parts) if p.contains(f.representative_point())) for f in faces]
+    area = [sum(f.area for f, o in zip(faces, owner) if o == i) for i in range(len(parts))]
+    keep = max(range(len(parts)), key=area.__getitem__)
+    warnings.append(f'{len(parts)-1} other structure(s) totalling {sum(area)-area[keep]:.1f} m2 ignored; the largest building was kept')
+    return [f for f, o in zip(faces, owner) if o == keep]
+
+
+def parse(text, units=None, primary_only=True):
+    """Parse DXF text. `units` (metres per drawing unit) overrides $INSUNITS.
+
+    With `primary_only` (default) only the largest connected structure is kept as the roof.
+    """
     header_units, entities = _read(_pairs(text))
     if units is None:
         if header_units not in INSUNITS_TO_M:
@@ -147,6 +165,8 @@ def parse(text, units=None):
         elif e['type'] == 'CIRCLE' and e['layer'] == OBSTRUCTIONS:
             vents.append((_first(e, 10) * units, _first(e, 20) * units, _first(e, 40) * units))
     faces = _faces(by_layer[BUILDINGS], warnings)
+    if primary_only:
+        faces = _primary_building(faces, warnings)
     if not faces:
         warnings.append('no roof faces found on the Buildings layer')
     outline = unary_union([f.buffer(.02) for f in faces]).buffer(-.02) if faces else None
@@ -155,8 +175,8 @@ def parse(text, units=None):
                         vents, obstruction_polys, counts, warnings)
 
 
-def load(path, units=None):
+def load(path, units=None, primary_only=True):
     path = Path(path)
     if path.stat().st_size > MAX_BYTES:
         raise DxfError(f'{path.name} is larger than {MAX_BYTES} bytes')
-    return parse(path.read_text(encoding='utf-8', errors='replace'), units)
+    return parse(path.read_text(encoding='utf-8', errors='replace'), units, primary_only)
