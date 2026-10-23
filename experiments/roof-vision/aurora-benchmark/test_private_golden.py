@@ -16,6 +16,7 @@ PRIVATE = Path(__file__).parent / 'private'
 HOUSES = sorted(p for p in PRIVATE.glob('*/') if (p / 'design.dxf').exists() and (p / 'result.json').exists())
 
 
+RAW_TOLERANCE = .03   # fitting may not leave large faces this far below the raw stage it starts from
 MAX_ABSORBED_FRACTION = .05   # share of the roof: unreproduced Aurora faces swallowed by neighbouring faces (original fit-1: 7.6%)
 LARGE_FACE_M2 = 10.   # a face this big that is not reproduced at IoU >= 0.5 is a defect, not noise
 
@@ -54,6 +55,13 @@ class PrivateGoldenTests(unittest.TestCase):
                 report = _scored(house)
                 share = report['stages']['fitted']['absorbed_m2'] / report['outline']['aurora_area_m2']
                 self.assertLessEqual(share, MAX_ABSORBED_FRACTION, 'fitted faces claim area that no fitted plane explains')
+
+    def test_fitting_stays_close_to_the_raw_stage_it_starts_from(self):
+        for house in HOUSES:
+            with self.subTest(house=house.name):
+                stages = _scored(house)['stages']
+                raw, fitted = stages['raw']['large_area_weighted_best_iou'], stages['fitted']['large_area_weighted_best_iou']
+                self.assertGreaterEqual(fitted, raw - RAW_TOLERANCE, 'fitting made the large faces clearly worse than the raw stage')
 
 
 if __name__ == '__main__':

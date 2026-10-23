@@ -26,7 +26,7 @@ from shapely.ops import polygonize, unary_union
 
 from .roof_refinement import _model, _poly, _polygons, _record, _plane_intersection, _edge_kind
 
-ALGORITHM_VERSION = "fit-3"
+ALGORITHM_VERSION = "fit-4"
 MAX_FACES = 128
 MAX_CELLS = 4096
 RETENTION_MIN = .5   # a plane group keeping less of its source area than this is reported as degraded
@@ -34,6 +34,10 @@ UNMODELED_RESIDUAL_M = .35   # same limit the raw stage uses to assign a pixel t
 MIN_UNMODELED_M2 = .5
 UNMODELED_OPEN_PX = 1        # opening radius that drops seam noise thinner than this
 KIND_RESIDUAL_M = .5         # mean residual beyond which an unmodeled region is raised or recessed
+RIDGE_REACH_M = 1.5          # how far past its supported span a ridge may run to meet another line
+MIXED_CELL_M2 = .5           # a cell is mixed when two sources each have at least this much in it ...
+MIXED_SHARE = .15            # ... and at least this share of their own area (a sliver of a big face is just edge noise)
+PIECE_FLOOR_M2 = .1          # smallest source overlap that becomes its own piece
 MAX_CARVE_FRACTION = .4      # a plane unexplained over more of its area than this is a bad fit, not a few unmodeled regions
 
 
@@ -228,6 +232,61 @@ def _retention(source_areas, fitted_areas):
     return [fitted/source if source > 0 else 1. for source, fitted in zip(source_areas, fitted_areas)]
 
 
+def _parts(geometry):
+    return list(geometry.geoms) if hasattr(geometry, 'geoms') else [geometry]
+
+
+def _trim_ridge(line, supported, network, reach):
+    """The stretch of a plane-intersection line that carries evidence, or None.
+
+    `line` is the full intersection of two planes; only `supported` (where the two faces meet)
+    is evidence of a ridge, hip or valley. Each end then runs on, up to `reach`, to the first
+    line in `network`, so the ridge still meets the boundary or the next ridge. Beyond that
+    the line is dropped: planes intersect forever, faces do not.
+    """
+    start, end = np.array(line.coords[0]), np.array(line.coords[-1])
+    length = float(np.linalg.norm(end-start))
+    if length < 1e-9 or supported.is_empty:
+        return None
+    axis = (end-start)/length
+    spans = [float(np.dot(np.array(p)-start, axis)) for g in _parts(supported) if not g.is_empty for p in g.coords]
+    low, high = max(min(spans), 0.), min(max(spans), length)
+    if high-low < 1e-6:
+        return None
+
+    def extend(t, sign):
+        origin = start+axis*t
+        hit = LineString([tuple(origin), tuple(origin+sign*axis*reach)]).intersection(network)
+        steps = [float(np.dot(np.array(p)-origin, sign*axis)) for g in _parts(hit) if not g.is_empty for p in g.coords]
+        steps = [d for d in steps if d >= -1e-9]
+        return t+sign*min(steps) if steps else t
+    return LineString([tuple(start+axis*extend(low, -1)), tuple(start+axis*extend(high, 1))])
+
+
+def _split_mixed(cells, sources, minimum, share, floor):
+    """Split cells that straddle faces, or hold a source plus unclaimed area, into one piece per owner.
+
+    A cell goes whole to one plane. A cell straddling two faces gives the smaller one away, and
+    a cell holding one face plus area no plane claims would absorb that area into the face.
+    A source counts as straddled only if the cell holds `minimum` m2 of it and `share` of its
+    area, so edge noise around a correctly straight ridge does not undo the ridge. A cell is also
+    split when `minimum` m2 or more of it is claimed by no source. Pieces keep each source's own
+    area; the unclaimed rest becomes a separate piece that the support rule then leaves empty.
+    """
+    pieces = []
+    for cell in cells:
+        overlap = [(cell.intersection(source), k) for k, source in enumerate(sources)]
+        claimed = [part for part, _ in overlap if part.area >= floor]
+        straddled = sum(1 for part, k in overlap if part.area >= minimum and part.area >= share*sources[k].area) >= 2
+        remainder = cell.difference(unary_union(claimed)) if claimed else cell
+        if not claimed or not (straddled or remainder.area >= minimum):
+            pieces.append(cell)
+            continue
+        for geometry in [*claimed, remainder]:
+            pieces += [g for g in _parts(geometry) if g.geom_type == 'Polygon' and g.area > 1e-7]
+    return pieces
+
+
 def _shift(mask, dy, dx):
     out = np.zeros_like(mask)
     h, w = mask.shape
@@ -359,7 +418,7 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
         lines = [domain.boundary]
         replacements = [[] for _ in groups]
         plane_lines, snapped = 0, 0
-        accepted = set()
+        accepted, ridges = set(), []
         for i, a in enumerate(sources):
             for j in range(i+1, len(sources)):
                 b = sources[j]
@@ -383,11 +442,9 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
                 delta = abs((models[i][0]-models[j][0])*p.x+(models[i][1]-models[j][1])*p.y+models[i][2]-models[j][2])
                 if delta > .12:
                     shifted, used = candidate, False
-                # Extend through the connected outline to reach arrangement nodes;
-                # source support restricts ownership so unrelated wings cannot
-                # be claimed by this plane merely because a line crosses them.
+                # Kept for later: trimmed to its supported span once the other lines are known.
                 components = [p for p in _polygons(domain) if p.distance(a) <= tolerance and p.distance(b) <= tolerance]
-                lines.append(shifted.intersection(unary_union(components)))
+                ridges.append((shifted, supported, unary_union(components)))
                 replacements[i].append(near.buffer(tolerance))
                 replacements[j].append(near.buffer(tolerance))
                 plane_lines += 1
@@ -401,8 +458,14 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
             if replacements[i]:
                 boundary = boundary.difference(unary_union(replacements[i]))
             lines.append(boundary.intersection(domain))
+        network = unary_union(lines)
+        for ridge, span, allowed in ridges:
+            kept = _trim_ridge(ridge, span, network, RIDGE_REACH_M)
+            if kept is not None:
+                lines.append(kept.intersection(allowed))
         cells = [cell for cell in polygonize(union_all(lines,grid_size=1e-7))
                  if domain.covers(cell.representative_point()) and cell.area > 1e-7]
+        cells = _split_mixed(cells, sources, MIXED_CELL_M2, MIXED_SHARE, PIECE_FLOOR_M2)
         if len(cells) > MAX_CELLS or len(cells)*data.size > 40_000_000:
             warnings.append('The line arrangement exceeded the bounded complexity limit.')
             return result

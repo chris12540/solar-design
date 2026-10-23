@@ -226,3 +226,83 @@ def test_fit_does_not_claim_pixels_its_plane_does_not_explain():
     assert result['quality']['unmodeled_area_m2'] == pytest.approx(5, abs=.4)
     assert result['quality']['height_rmse_m'] < .05
     assert any('unmodeled' in w.lower() for w in result['warnings'])
+
+
+def test_trim_ridge_keeps_the_supported_span_and_reaches_the_next_line():
+    from shapely.geometry import MultiLineString
+    from backend.roof_fitting import _trim_ridge
+    line = LineString([(-10, 0), (30, 0)])                       # a plane intersection across the whole roof
+    supported = LineString([(5, 0), (9, 0)])
+    walls = MultiLineString([[(4.5, -5), (4.5, 5)], [(9.8, -5), (9.8, 5)]])
+    trimmed = _trim_ridge(line, supported, walls, reach=1.)
+    assert sorted(x for x, _ in trimmed.coords) == pytest.approx([4.5, 9.8])
+    assert _trim_ridge(line, supported, MultiLineString([[(12, -5), (12, 5)]]), reach=1.).length == pytest.approx(4)
+    assert _trim_ridge(line, LineString(), walls, reach=1.) is None
+
+
+def test_split_mixed_cells_gives_each_source_its_own_piece():
+    from backend.roof_fitting import _split_mixed
+    cell = box(0, 0, 10, 10)
+    pieces = _split_mixed([cell], [box(0, 0, 6, 10), box(6, 0, 10, 10)], minimum=.5, share=.15, floor=.1)
+    assert sorted(round(p.area) for p in pieces) == [40, 60]
+    pieces = _split_mixed([cell], [box(0, 0, 4, 10), box(6, 0, 10, 10)], minimum=.5, share=.15, floor=.1)
+    assert sorted(round(p.area) for p in pieces) == [20, 40, 40]                # two sources and the unclaimed middle
+    assert _split_mixed([box(0, 0, 5, 5)], [box(-1, -1, 9, 9), box(20, 20, 30, 30)], .5, .15, .1)[0].area == pytest.approx(25)
+    assert len(_split_mixed([cell], [box(0, 0, 10, 9.97), box(0, 9.97, 10, 10.7)], .5, .15, .1)) == 1   # second source only 0.3 m2 in the cell
+    assert len(_split_mixed([cell], [box(0, 0, 10, 9), box(0, 9, 10, 200)], .5, .15, .1)) == 1          # 10 m2, but under 1% of a huge face
+
+
+def test_split_also_keeps_unclaimed_area_out_of_a_single_source_cell():
+    from backend.roof_fitting import _split_mixed
+    cell = box(0, 0, 10, 10)
+    pieces = _split_mixed([cell], [box(0, 0, 6, 10)], minimum=.5, share=.15, floor=.1)
+    assert sorted(round(p.area) for p in pieces) == [40, 60]                    # the source's part and the unclaimed part
+    assert len(_split_mixed([cell], [box(0, 0, 10, 9.97)], .5, .15, .1)) == 1    # 0.3 m2 unclaimed is edge noise
+    assert len(_split_mixed([cell], [], .5, .15, .1)) == 1                       # no source: left for the support rule
+
+
+def _hip_roof():
+    """A 10 x 6 m hip roof with a 4 m ridge at y=0: four planes, hips at 45 degrees."""
+    from backend.roof_fitting import fit as _fit
+    transform = Affine(.1, 0, 500000-10, 0, -.1, 4400000+10)
+    lon, lat = Transformer.from_crs('EPSG:32613', 'EPSG:4326', always_xy=True).transform(500000, 4400000)
+    rows, cols = np.indices((200, 200))
+    x, y = (cols+.5)*.1-10, 10-(rows+.5)*.1
+    north = 10-.5*y
+    south = 10+.5*y
+    east = 10-.5*(x-2)
+    west = 10+.5*(x+2)
+    data = np.where(y >= 0, north, south)
+    data = np.where((x > 2) & (np.abs(y) < x-2), east, data)
+    data = np.where((x < -2) & (np.abs(y) < -x-2), west, data)
+    data = np.where(np.abs(x) > 5, 0, data)
+    def tif(array):
+        stream = BytesIO()
+        with rasterio.open(stream, 'w', driver='GTiff', width=200, height=200, count=1, dtype=array.dtype,
+                           crs='EPSG:32613', transform=transform) as ds:
+            ds.write(array.astype(array.dtype), 1)
+        return stream.getvalue()
+    def record(points):
+        p = Polygon(points)
+        return {'polygon': list(p.exterior.coords), 'holes': []}
+    shapes_ = {'north': [(-5, 3), (5, 3), (2, 0), (-2, 0)], 'south': [(-5, -3), (5, -3), (2, 0), (-2, 0)],
+               'east': [(5, -3), (5, 3), (2, 0)], 'west': [(-5, -3), (-5, 3), (-2, 0)]}
+    models = {'north': (0, -.5, 10), 'south': (0, .5, 10), 'east': (-.5, 0, 11), 'west': (.5, 0, 11)}
+    az = {'north': 0, 'south': 180, 'east': 90, 'west': 270}
+    faces = [dict(record(pts), id=f'face-{k}', source_plane_id=f'plane-{k}', plane_model=dict(zip('abc', models[k])),
+                  pitch_degrees=26.6, azimuth_degrees=az[k], fit_rmse_m=.02) for k, pts in shapes_.items()]
+    raw = dict(status='needs_review', origin=dict(latitude=lat, longitude=lon, crs='EPSG:32613'),
+               roof_outline=record([(-5, -3), (5, -3), (5, 3), (-5, 3)]), faces=faces,
+               quality={'pixel_size_m': .1}, obstruction_candidates=[])
+    return raw, dict(dsm=tif((data*1).astype('float32')), mask=tif(np.where(np.abs(x) <= 5, np.where(np.abs(y) <= 3, 1, 0), 0).astype('uint8')))
+
+
+def test_hip_roof_keeps_four_faces_with_straight_hips():
+    raw, inputs = _hip_roof()
+    result = fit(raw, inputs, {})
+    assert result['status'] == 'experimental'
+    areas = sorted(round(a, 1) for a in (s.area for s in _shapes(result)))
+    assert areas == pytest.approx([9., 9., 21., 21.], abs=.5)                  # two triangles (6 x 3 / 2) and two trapezoids ((10 + 4) / 2 x 3)
+    assert result['quality']['height_rmse_m'] < .05
+    assert result['quality']['coverage_fraction'] > .95
+    assert result['unmodeled_regions'] == []
