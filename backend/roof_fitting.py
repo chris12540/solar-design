@@ -24,9 +24,10 @@ from shapely.ops import polygonize, unary_union
 
 from .roof_refinement import _model, _poly, _polygons, _record, _plane_intersection, _edge_kind
 
-ALGORITHM_VERSION = "fit-1"
+ALGORITHM_VERSION = "fit-2"
 MAX_FACES = 128
 MAX_CELLS = 4096
+RETENTION_MIN = .5   # a plane group keeping less of its source area than this is reported as degraded
 
 
 def _raster(raw, inputs):
@@ -194,6 +195,32 @@ def _groups(faces, shapes, tolerance):
     return groups
 
 
+def _contact_lines(sources, skip, reach, tolerance, minimum):
+    """Source-label boundaries between touching plane groups whose ridge was not accepted.
+
+    A rejected ridge candidate means the plane intersection disagrees with the
+    source labels, so the label boundary is the only evidence separating the two
+    groups. Without it a neighbouring ridge's replacement buffer can erase the
+    boundary, leaving one arrangement cell that mixes both groups, and the whole
+    cell then goes to whichever plane has the lower residual over the mixture.
+    """
+    lines = []
+    for i, a in enumerate(sources):
+        for j in range(i+1, len(sources)):
+            if (i, j) in skip:
+                continue
+            shared = a.boundary.intersection(sources[j].buffer(reach))
+            for part in getattr(shared, 'geoms', [shared]):
+                if part.geom_type == 'LineString' and part.length >= minimum:
+                    lines.append(part.simplify(tolerance, preserve_topology=False))
+    return lines
+
+
+def _retention(source_areas, fitted_areas):
+    """Fitted area as a fraction of each group's source area (1 when the source has none)."""
+    return [fitted/source if source > 0 else 1. for source, fitted in zip(source_areas, fitted_areas)]
+
+
 def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> dict[str, Any]:
     """Fit an evidence-scored line arrangement in source local projected meters."""
     warnings = []
@@ -254,6 +281,7 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
         lines = [domain.boundary]
         replacements = [[] for _ in groups]
         plane_lines, snapped = 0, 0
+        accepted = set()
         for i, a in enumerate(sources):
             for j in range(i+1, len(sources)):
                 b = sources[j]
@@ -286,6 +314,8 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
                 replacements[j].append(near.buffer(tolerance))
                 plane_lines += 1
                 snapped += int(used)
+                accepted.add((i, j))
+        lines += _contact_lines(sources, accepted, tolerance*.5, tolerance, max(.5, pixel*3))
         for i, source in enumerate(sources):
             # Keep unsupported breaks, but replace stair-stepped shared ridges as
             # a whole rather than separately simplifying their two sides.
@@ -319,7 +349,7 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
                 errors.append(float(np.square(residual).sum()))
                 absolute_errors.append(np.abs(residual))
                 sampled += len(residual)
-        emitted = []
+        emitted, degraded = [], []
         for index, group in enumerate(groups):
             # Zero-tolerance removes only redundant collinear nodes; independent
             # positive-tolerance simplification would tear shared topology.
@@ -329,7 +359,11 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
                 continue
             representative = faces[group[0]]
             emitted.append(shape)
+            retained = _retention([sources[index].area], [shape.area])[0]
+            if retained < RETENTION_MIN:
+                degraded += [str(faces[i].get('source_plane_id', faces[i].get('id', f'plane-{i+1}'))) for i in group]
             result['face_groups'].append(dict(
+                source_retained_fraction=float(retained),
                 id=f'group-{len(emitted)}', parts=[_record(p) for p in parts],
                 source_region_ids=[str(faces[i].get('id', f'region-{i+1}')) for i in group],
                 source_plane_ids=sorted({str(faces[i].get('source_plane_id', faces[i].get('id', f'plane-{i+1}'))) for i in group}),
@@ -400,9 +434,14 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
         missing_planes = sorted(source_planes-represented)
         result['quality']['unrepresented_source_planes'] = missing_planes
         result['quality']['checks']['source_planes_retained'] = not missing_planes
-        result['quality']['checks_passed'] = result['quality']['checks_passed'] and not missing_planes
+        degraded = sorted(set(degraded)-set(missing_planes))
+        result['quality']['degraded_source_planes'] = degraded
+        result['quality']['checks']['source_regions_retained'] = not degraded
+        result['quality']['checks_passed'] = result['quality']['checks_passed'] and not missing_planes and not degraded
         if missing_planes:
             warnings.append('Some source planes were not retained by the fitted topology: '+', '.join(missing_planes)+'. Their connections remain unresolved.')
+        if degraded:
+            warnings.append('Some source planes kept under half of their original area after fitting: '+', '.join(degraded)+'. Their regions may have been assigned to a neighboring plane.')
         if rmse is None or rmse > .35:
             warnings.append(f'Height fit failed the development check (RMSE {rmse:.2f} m; limit 0.35 m).' if rmse is not None else 'Height fit could not be measured.')
         warnings.append('Experimental automatic fitting requires roof and obstruction review; design validation has not passed.')

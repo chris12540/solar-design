@@ -136,3 +136,25 @@ def test_unrepresented_source_plane_is_reported_and_prevents_check_pass():
     assert result['quality']['checks']['source_planes_retained'] is False
     assert result['quality']['checks_passed'] is False
     assert any('unresolved' in warning for warning in result['warnings'])
+
+
+def test_contact_lines_keep_the_label_boundary_of_a_rejected_pair():
+    from backend.roof_fitting import _contact_lines
+    lines = _contact_lines([box(0, 0, 4, 10), box(4, 0, 8, 10)], set(), reach=.05, tolerance=.35, minimum=.5)
+    assert len(lines) == 1
+    assert lines[0].length == pytest.approx(10, abs=.1)
+    assert lines[0].hausdorff_distance(LineString([(4, 0), (4, 10)])) < .06
+
+
+def test_contact_lines_skip_accepted_distant_and_brief_contacts():
+    from backend.roof_fitting import _contact_lines
+    left, right = box(0, 0, 4, 10), box(4, 0, 8, 10)
+    assert _contact_lines([left, right], {(0, 1)}, .05, .35, .5) == []             # ridge was accepted
+    assert _contact_lines([left, box(6, 0, 8, 10)], set(), .05, .35, .5) == []     # 2 m apart
+    assert _contact_lines([left, box(4, 9.8, 8, 20)], set(), .05, .35, .5) == []   # 0.2 m of contact
+    assert len(_contact_lines([left, right, box(0, 10, 4, 14)], {(0, 1)}, .05, .35, .5)) == 1
+
+
+def test_retention_flags_groups_that_kept_under_half_their_source_region():
+    from backend.roof_fitting import _retention
+    assert _retention([12.5, 80., 0.], [1.1, 95., 0.]) == pytest.approx([1.1 / 12.5, 95 / 80., 1.])
