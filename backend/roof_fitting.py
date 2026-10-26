@@ -25,9 +25,10 @@ from shapely import union_all
 from shapely.ops import polygonize, unary_union
 
 from .roof_cleanup import straighten_fit
+from .roof_plausibility import assess
 from .roof_refinement import _model, _poly, _polygons, _record, _plane_intersection, _edge_kind
 
-ALGORITHM_VERSION = "fit-7"
+ALGORITHM_VERSION = "fit-8"
 MAX_FACES = 128
 MAX_CELLS = 4096
 RETENTION_MIN = .5   # a plane group keeping less of its source area than this is reported as degraded
@@ -747,6 +748,13 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
             warnings.append('Aligned RGB evidence was unavailable; photo boundaries were not checked.')
         result['status'] = 'experimental' if emitted else 'unavailable'
         result['straightened'] = straighten_fit(result['face_groups'], emitted, angle) if emitted else dict(status='skipped', reason='no faces were fitted', face_groups=[])
+        try:       # a report of how the roof compares with how roofs are built; never a reason to lose the fit
+            raw_coverage = (raw.get('quality') or {}).get('polygon_coverage_fraction')
+            result['plausibility'] = dict(
+                fitted=assess(result['face_groups'], outline.area, raw_coverage) if emitted else None,
+                straightened=assess(result['straightened']['face_groups'], outline.area, raw_coverage) if result['straightened']['status'] == 'ok' else None)
+        except Exception as exc:
+            result['plausibility'] = dict(fitted=None, straightened=None, error=type(exc).__name__)
         return result
     except Exception as exc:
         result['face_groups'] = []

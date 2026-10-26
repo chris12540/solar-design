@@ -97,7 +97,8 @@ def from_result(data):
     meta = {'algorithm_version': data.get('algorithm_version'), 'pipeline_version': data.get('pipeline_version'),
             'design_ready': data.get('design_ready'),
             'height_rmse_m': quality.get('height_rmse_m'),
-            'photo_edge_support': quality.get('photo_edge_support')}
+            'photo_edge_support': quality.get('photo_edge_support'),
+            'plausibility': (data.get('fitting') or {}).get('plausibility')}
     return OurRoof(outline, stages, [o for o in obstructions if not o.is_empty], meta)
 
 

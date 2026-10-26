@@ -39,6 +39,7 @@ type RoofCandidate = {
   unknown_checks: string[]
   shading_status: 'unknown' | 'available'
 }
+type Plausibility = { status: string; framing_pitch?: { degrees: number; ratio: number } | null; edges: { length_m: number; consistent: number }; flags: { kind: string; severity: string; message: string; face_ids: string[] }[] }
 type RoofRefinement = {
   algorithm_version: string
   status: string
@@ -49,6 +50,7 @@ type RoofRefinement = {
   warnings?: string[]
   design_ready?: boolean
   candidates?: RoofCandidate[]
+  plausibility?: { fitted?: Plausibility | null; straightened?: Plausibility | null }
   straightened?: { status: string; reason?: string; face_groups?: RefinedFace[]; quality?: { vertex_count?: number; source_vertex_count?: number; min_face_overlap?: number } }
 }
 export type RoofResult = {
@@ -340,6 +342,13 @@ export default function RoofInspection({ selection, parcelId }: { selection: Sel
           {showingFitted && <details className="roof-face-list roof-fit-checks"><summary>Experimental · Needs validation</summary>
             <p className="roof-message">Height RMSE {number(result.fitting?.quality?.height_rmse_m, 2)} m · Outline IoU {number(result.fitting?.quality?.outline_iou, 2)} · Overlap {number(result.fitting?.quality?.overlap_area_m2, 2)} m²</p>
             <p className="roof-message">Coverage {percent(result.fitting?.quality?.coverage_fraction)} · Boundary deviation {number(result.fitting?.quality?.max_boundary_deviation_m, 2)} m · Photo contrast at edges {percent(result.fitting?.quality?.photo_edge_support)}</p>
+            {(result.fitting?.plausibility?.straightened ?? result.fitting?.plausibility?.fitted) && (() => {
+              const plausibility = (result.fitting?.plausibility?.straightened ?? result.fitting?.plausibility?.fitted) as Plausibility
+              return <>
+                <p className="roof-message">Roof plausibility · {plausibility.status === 'ok' ? 'nothing for review' : 'review suggested'} · framing pitch {plausibility.framing_pitch ? `${number(plausibility.framing_pitch.degrees)}° (${plausibility.framing_pitch.ratio}:12)` : '—'} · {percent(plausibility.edges.consistent)} of shared edges meet at one height</p>
+                {plausibility.flags.length > 0 && <ul className="roof-warnings">{plausibility.flags.map((flag, index) => <li key={index}>{flag.severity === 'review' ? 'Review: ' : ''}{flag.message}</li>)}</ul>}
+              </>
+            })()}
             {result.fitting?.straightened && <p className="roof-message">{result.fitting.straightened.status === 'ok'
               ? `Straight edges · ${result.fitting.straightened.quality?.vertex_count ?? '—'} vertices (fit: ${result.fitting.straightened.quality?.source_vertex_count ?? '—'}) · every face keeps ${percent(result.fitting.straightened.quality?.min_face_overlap)} or more of its fitted area`
               : `Straight edges unavailable: ${result.fitting.straightened.reason ?? 'not produced'}`}</p>}

@@ -27,6 +27,8 @@ GATES = (
     ('stages.straightened.large_area_weighted_best_iou', 'higher', .02),
     ('stages.straightened.face_recall', 'higher', .02),
     ('stages.straightened.absorbed_m2', 'lower', .5),
+    ('plausibility.straightened.edges.consistent', 'higher', .05),
+    ('plausibility.straightened.edges.inconsistent', 'lower', .05),
     ('obstructions.recall', 'higher', 0.),
     ('obstructions.false_positives', 'lower', 0),
     ('orientation.fitted.azimuth_within_tol', 'higher', .02),
@@ -55,6 +57,7 @@ def build_report(design, roof, reference=None, reference_panel_count=None, any_o
                          'fit_iou': fit_iou},
         'outline': metrics.outline_report(aurora_outline, roof.outline),
         'stages': {}, 'orientation': {},
+        'plausibility': roof.meta.get('plausibility'),
     }
     for stage in ours.STAGES:
         polys = roof.polygons(stage)
@@ -98,6 +101,12 @@ def summarize(report):
             lines.append(f"    candidate {fp['index']} sits on Aurora roof face {fp['mostly_on_aurora_face']} (likely a roof step)")
     p = report['panels']
     lines.append(f"Aurora modules: {p['count']} (median {p['median_dims_m'] and [round(d, 2) for d in p['median_dims_m']]} m), per face {p['per_face']}")
+    plausible = (report.get('plausibility') or {}).get('straightened')
+    if plausible:
+        framing, edges = plausible.get('framing_pitch'), plausible['edges']
+        lines.append('plausibility (straightened): %s; framing pitch %s; shared edges %.0f m: %.0f%% consistent, %.0f%% correctable, %.0f%% step, %.0f%% inconsistent; flags %s' % (
+            plausible['status'], '%.1f deg (%d:12)' % (framing['degrees'], framing['ratio']) if framing else 'n/a', edges['length_m'],
+            100*edges['consistent'], 100*edges['correctable'], 100*edges['step'], 100*edges['inconsistent'], sorted({f['kind'] for f in plausible['flags']}) or 'none'))
     for stage, orient in report['orientation'].items():
         lines.append(f"{stage} orientation: azimuth within tol {orient['azimuth_within_tol']}, pitch within tol {orient['pitch_within_tol']}")
     return '\n'.join(lines)

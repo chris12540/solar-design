@@ -51,7 +51,21 @@ A straightened result is only used if every face survives, each still overlaps i
 
 On the five houses scored so far it keeps 8-25% of the fit's vertices, puts 79-92% of the edge length in straight runs of a metre or more (9-61% before), changes total roof area by under 2 m2 and leaves large-face IoU against the Aurora designs level or higher (0.000 to +0.007). Corners that are cut at an angle and are not short, and faces the fit itself gets wrong (teeth beside a chimney, irregular patio covers), stay as they are.
 
-## Cost and failure handling
+## Plausibility report (fit-8)
+
+`backend/roof_plausibility.py` checks the fitted faces, and the straightened copy, against how pitched roofs are built, and stores the result as `fitting.plausibility.fitted` and `.straightened`. It reports; it never changes a face. The app shows it under the fit checks.
+
+- **Shared edges.** Each edge two faces share is classed by how their two planes behave along it: `consistent` (they meet there, within 0.15 m on average, because a raster edge wobbles), `correctable` (the line where the planes meet passes within 0.8 m, so the edge is misplaced), `step` (near-parallel planes a constant height apart: a real step between roof levels, or a bad plane) or `inconsistent`.
+- **Framing pitch.** The area-weighted pitch of the main pitched faces (10 m2 or more, 2:12 or steeper), the nearest standard n:12 ratio, and the spread.
+- **Low-slope faces.** Faces under 2:12 (9.5 degrees), below the usual shingle and tile minimum: patio covers, porches or flat roofs.
+- **Axes.** The roof's axes from the main faces' azimuths, and how far each pitched face of 5 m2 or more faces from them.
+- **Flags**, each a note or a review. A review means part of the roof was probably lost (the raw stage covers under 80% of the roof mask, or the faces cover under 90% of the outline) or a face of 5 m2 or more is more than 5 degrees off the framing pitch. Notes cover a face 3 to 5 degrees off, a framing pitch more than 1.5 degrees from any standard ratio, low-slope faces, faces off the axes, slivers under 2 m2 and edges that are steps.
+
+On the five houses scored so far the main faces average within 0.6 degrees of a standard pitch (4:12 or 5:12), face within 0 to 4 degrees of the roof's axes, and 55-94% of the straightened faces' shared-edge length is consistent. Every house has at least one low-slope face. The large gaps are between near-parallel faces at different heights, which are steps, not misplaced edges.
+
+The straightening can move a ridge or hip a few tenths of a metre off the line where its planes meet (the fit's edges are 95% consistent on one house and the straightened ones 55%); this is open work. Moving edges onto the line where their planes meet (a plane-intersection snap in the straightening) was tried and removed: it changed large-face IoU against the Aurora designs by -0.008 to +0.005 and the average gap along shared edges by only 0.01-0.02 m, because the ridges and hips that matter already sit on plane intersections.
+
+
 
 One authorized Data Layers request was used for the sample upgrade; no new Building Insights requests. No retry loop. Optional RGB failure retains acquired DSM/mask inputs. All later fitting checks run on saved bytes. Original sample expiry remains unchanged.
 

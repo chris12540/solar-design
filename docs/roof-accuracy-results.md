@@ -118,6 +118,22 @@ House D is a fourth house. It was held out while `fit-2` to `fit-6` were built, 
 
 Total roof area is preserved to within 2 m2 on every house, and every face keeps an overlap (IoU) of at least 0.86 with its fitted face. What the straightening does not fix: a 2.5 m2 stray piece beside a chimney that the fit gives to the wrong face, the irregular patio-cover area on house D, chamfered corners longer than 1.6 m, and the small stray teeth where the fit's own faces are wrong.
 
+## Plausibility report (fit-8)
+
+`fit-8` adds a report of how the straightened faces compare with how pitched roofs are built (see [`roof-photo-fitting.md`](roof-photo-fitting.md)). It changes no face and does not change any score above. Per house, for the straightened faces:
+
+| House | Framing pitch (spread) | Shared edges | Meeting at one height | Real steps | Low-slope faces | Review |
+|---|---|---|---|---|---|---|
+| A | 22.1 deg = 5:12 (10.2) | 47 m | 75% | 8% | 1 | yes: one 13 m2 face 9 degrees under the framing pitch |
+| B | 22.3 deg = 5:12 (3.7) | 36 m | 77% | 0% | 1 | no |
+| C | 18.9 deg = 4:12 (1.2) | 64 m | 94% | 0% | 1 | no |
+| D | 19.0 deg = 4:12 (2.8) | 35 m | 64% | 23% | 2 | no |
+| E | 23.1 deg = 5:12 (6.8) | 40 m | 55% | 0% | 1 | yes: one 21 m2 face 5 degrees over the framing pitch |
+
+Straightening can cost physical consistency, which the benchmark (silhouettes only) does not see. Share of shared-edge length where the two planes meet within 0.15 m on average, fit to straightened: house A 85% to 75%, B 80% to 77%, C 87% to 94%, D 81% to 64%, E 95% to 55%. On house E most of the drop is one edge: the 17.7 m main ridge moves from a 0.05 m gap to 0.16 m, about 0.2 m off where its planes meet, which just crosses the threshold; the other pairs stay within about 0.1 m. Keeping edges that are already consistent on their plane lines while straightening is open: a plane-intersection snap added after the fact did not do it (see the findings below).
+
+House E is a fifth house that has no Aurora design yet, so it is not scored elsewhere in this document. The main faces of every house sit within 0.6 degrees of one standard pitch, which is the regularity a construction-aware step can lean on. The two reviews may be real (a lower-pitched valley face, a steeper gable) or fit errors; the report cannot tell which.
+
 ## Findings that did not become code
 
 - **A5/A7 (a ring Aurora draws around a flat roof) is not a height defect.** The ring is coplanar with the roof in the heights (median offset -0.02 m, 3 degrees). Only the photo separates them. House C has the same kind of split.
@@ -125,6 +141,7 @@ Total roof area is preserved to within 2 m2 on every house, and every face keeps
 - **Vents are not visible in the heights** (rise of 0.03-0.17 m for a 7 inch vent), and are at best faint in a 10 cm photo. On house C we found 2 of 17 reference obstructions, 14 of which are vents.
 - **Raising the image resolution through the current tool changes nothing.** The photo path shrinks images to 0.1 m and nudges lines by about 6 cm. A 2 cm image showed that outer edges are already within about 6 cm and that interior lines need a different detector.
 - **A side-of-ridge rule is house-C-only.** Moving cells that a face holds on the far side of an accepted ridge to the face on that side gives house C +0.008, house A -0.001 and no change on house B, so it was dropped (see the house C section).
+- **Snapping edges to plane intersections did not help.** An edge between two faces was moved onto the line where their planes meet when it lay within 0.6 m of it. Against the straightened faces without it, large-face IoU changed by -0.001 on house A, +0.005 and -0.008 on house B (AI and human design), -0.002 on house C and -0.001 on house D, with every other setting tried between -0.008 and +0.005, and the average vertical gap along shared edges fell by only 0.01-0.02 m. The ridges and hips that matter already sit on plane intersections (gaps of 0.05-0.06 m); the large gaps are between near-parallel faces at different heights, up to 1.2 m, which are real steps where a plane intersection means nothing. Letting the moved edges take any direction lost a face on house A. It was removed.
 - **Ridge reach and end slack are not the lever.** Changing the reach from 0.75 to 3 m changed nothing; 6 m and 12 m helped house A and hurt house B. Extending every unconnected end by 0.5-2 m gave the same result as `fit-6` (so the gain is from ends that fail to meet, not from length), but it is arbitrary where `fit-6` is bounded by evidence.
 
 ## Limits

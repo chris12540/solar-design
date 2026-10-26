@@ -71,6 +71,17 @@ class PrivateGoldenTests(unittest.TestCase):
                 raw, fitted = stages['raw']['large_area_weighted_best_iou'], stages['fitted']['large_area_weighted_best_iou']
                 self.assertGreaterEqual(fitted, raw - RAW_TOLERANCE, 'fitting made the large faces clearly worse than the raw stage')
 
+    def test_the_plausibility_report_finds_no_lost_part_of_the_roof(self):
+        for house in HOUSES:
+            with self.subTest(house=house.name):
+                report = json.loads((house / 'result.json').read_text())['fitting'].get('plausibility')
+                if not report:
+                    self.skipTest(f'{house.name}: result.json predates the plausibility report; re-export it')
+                for stage in ('fitted', 'straightened'):
+                    self.assertIsNotNone(report[stage], f'no {stage} report: {report.get("error")}')
+                    lost = [f['kind'] for f in report[stage]['flags'] if f['kind'] in ('raw_coverage_low', 'outline_coverage_low')]
+                    self.assertEqual(lost, [], 'faces cover too little of the roof: the pipeline lost part of it')
+
     def test_straightened_faces_are_straighter_and_no_less_accurate(self):
         for house in HOUSES:
             with self.subTest(house=house.name):
