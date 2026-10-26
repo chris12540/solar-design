@@ -1,0 +1,349 @@
+{
+ "note": "Fitted-stage scores against Aurora designs; same saved inputs and scoring for every version. Houses are anonymised; A and B are on one street, C is elsewhere, and none of the fixes were tuned on C. height_rmse_m is measured over different areas before and after fit-3, so it is not comparable across that change.",
+ "cases": {
+  "House A vs AI design": {
+   "reference": {
+    "faces": 16,
+    "large": 11,
+    "ours": 9,
+    "obstructions": "0 of 7 found, 1 false positive"
+   },
+   "raw_stage": {
+    "large": 0.85,
+    "all": 0.828,
+    "recall": 0.943
+   },
+   "outline": {
+    "iou": 0.972,
+    "p90_m": 0.24,
+    "max_m": 0.55
+   },
+   "versions": {
+    "fit-1": {
+     "large_face_iou": 0.767,
+     "all_face_iou": 0.747,
+     "face_recall": 0.903,
+     "absorbed_m2": 23.1,
+     "faces": 9,
+     "false_positive_obstructions": 1,
+     "coverage": 0.965,
+     "height_rmse_m": 0.358,
+     "unmodeled_m2": 0.0
+    },
+    "fit-2": {
+     "large_face_iou": 0.819,
+     "all_face_iou": 0.798,
+     "face_recall": 0.943,
+     "absorbed_m2": 11.9,
+     "faces": 9,
+     "false_positive_obstructions": 1,
+     "coverage": 0.965,
+     "height_rmse_m": 0.346,
+     "unmodeled_m2": 0.0
+    },
+    "fit-3": {
+     "large_face_iou": 0.841,
+     "all_face_iou": 0.819,
+     "face_recall": 0.943,
+     "absorbed_m2": 7.0,
+     "faces": 9,
+     "false_positive_obstructions": 1,
+     "coverage": 0.929,
+     "height_rmse_m": 0.148,
+     "unmodeled_m2": 12.1
+    },
+    "fit-4": {
+     "large_face_iou": 0.849,
+     "all_face_iou": 0.827,
+     "face_recall": 0.943,
+     "absorbed_m2": 7.3,
+     "faces": 9,
+     "false_positive_obstructions": 1,
+     "coverage": 0.938,
+     "height_rmse_m": 0.056,
+     "unmodeled_m2": 0.0
+    },
+    "fit-5": {
+     "large_face_iou": 0.853,
+     "all_face_iou": 0.83,
+     "face_recall": 0.943,
+     "absorbed_m2": 3.3,
+     "faces": 9,
+     "false_positive_obstructions": 1,
+     "coverage": 0.918,
+     "height_rmse_m": 0.047,
+     "unmodeled_m2": 6.2
+    },
+    "fit-6": {
+     "large_face_iou": 0.869,
+     "all_face_iou": 0.847,
+     "face_recall": 0.943,
+     "absorbed_m2": 3.3,
+     "faces": 9,
+     "false_positive_obstructions": 1,
+     "coverage": 0.919,
+     "height_rmse_m": 0.08,
+     "unmodeled_m2": 6.2
+    }
+   }
+  },
+  "House B vs AI design": {
+   "reference": {
+    "faces": 11,
+    "large": 8,
+    "ours": 7,
+    "obstructions": "1 of 11 found, 0 false positives"
+   },
+   "raw_stage": {
+    "large": 0.807,
+    "all": 0.803,
+    "recall": 0.972
+   },
+   "outline": {
+    "iou": 0.962,
+    "p90_m": 0.3,
+    "max_m": 0.61
+   },
+   "versions": {
+    "fit-1": {
+     "large_face_iou": 0.728,
+     "all_face_iou": 0.724,
+     "face_recall": 0.929,
+     "absorbed_m2": 18.7,
+     "faces": 7,
+     "false_positive_obstructions": 0,
+     "coverage": 0.979,
+     "height_rmse_m": 0.43,
+     "unmodeled_m2": 0.0
+    },
+    "fit-2": {
+     "large_face_iou": 0.759,
+     "all_face_iou": 0.755,
+     "face_recall": 0.972,
+     "absorbed_m2": 7.2,
+     "faces": 7,
+     "false_positive_obstructions": 0,
+     "coverage": 0.979,
+     "height_rmse_m": 0.376,
+     "unmodeled_m2": 0.0
+    },
+    "fit-3": {
+     "large_face_iou": 0.771,
+     "all_face_iou": 0.767,
+     "face_recall": 0.972,
+     "absorbed_m2": 6.1,
+     "faces": 7,
+     "false_positive_obstructions": 0,
+     "coverage": 0.943,
+     "height_rmse_m": 0.256,
+     "unmodeled_m2": 10.8
+    },
+    "fit-4": {
+     "large_face_iou": 0.81,
+     "all_face_iou": 0.806,
+     "face_recall": 0.972,
+     "absorbed_m2": 6.7,
+     "faces": 7,
+     "false_positive_obstructions": 0,
+     "coverage": 0.948,
+     "height_rmse_m": 0.094,
+     "unmodeled_m2": 0.5
+    },
+    "fit-5": {
+     "large_face_iou": 0.814,
+     "all_face_iou": 0.81,
+     "face_recall": 0.972,
+     "absorbed_m2": 3.6,
+     "faces": 7,
+     "false_positive_obstructions": 0,
+     "coverage": 0.928,
+     "height_rmse_m": 0.092,
+     "unmodeled_m2": 6.1
+    },
+    "fit-6": {
+     "large_face_iou": 0.814,
+     "all_face_iou": 0.81,
+     "face_recall": 0.972,
+     "absorbed_m2": 3.6,
+     "faces": 7,
+     "false_positive_obstructions": 0,
+     "coverage": 0.928,
+     "height_rmse_m": 0.092,
+     "unmodeled_m2": 6.1
+    }
+   }
+  },
+  "House B vs human design": {
+   "reference": {
+    "faces": 14,
+    "large": 9,
+    "ours": 7,
+    "obstructions": "3 of 12 found (one physical object drawn as three shapes), 0 false positives"
+   },
+   "raw_stage": {
+    "large": 0.839,
+    "all": 0.82,
+    "recall": 0.934
+   },
+   "outline": {
+    "iou": 0.956,
+    "p90_m": 0.36,
+    "max_m": 0.85
+   },
+   "versions": {
+    "fit-1": {
+     "large_face_iou": 0.731,
+     "all_face_iou": 0.715,
+     "face_recall": 0.893,
+     "absorbed_m2": 24.6,
+     "faces": 7,
+     "false_positive_obstructions": 0,
+     "coverage": 0.979,
+     "height_rmse_m": 0.43,
+     "unmodeled_m2": 0.0
+    },
+    "fit-2": {
+     "large_face_iou": 0.763,
+     "all_face_iou": 0.746,
+     "face_recall": 0.934,
+     "absorbed_m2": 13.8,
+     "faces": 7,
+     "false_positive_obstructions": 0,
+     "coverage": 0.979,
+     "height_rmse_m": 0.376,
+     "unmodeled_m2": 0.0
+    },
+    "fit-3": {
+     "large_face_iou": 0.787,
+     "all_face_iou": 0.769,
+     "face_recall": 0.934,
+     "absorbed_m2": 11.6,
+     "faces": 7,
+     "false_positive_obstructions": 0,
+     "coverage": 0.943,
+     "height_rmse_m": 0.256,
+     "unmodeled_m2": 10.8
+    },
+    "fit-4": {
+     "large_face_iou": 0.837,
+     "all_face_iou": 0.818,
+     "face_recall": 0.934,
+     "absorbed_m2": 11.2,
+     "faces": 7,
+     "false_positive_obstructions": 0,
+     "coverage": 0.948,
+     "height_rmse_m": 0.094,
+     "unmodeled_m2": 0.5
+    },
+    "fit-5": {
+     "large_face_iou": 0.849,
+     "all_face_iou": 0.83,
+     "face_recall": 0.934,
+     "absorbed_m2": 6.8,
+     "faces": 7,
+     "false_positive_obstructions": 0,
+     "coverage": 0.928,
+     "height_rmse_m": 0.092,
+     "unmodeled_m2": 6.1
+    },
+    "fit-6": {
+     "large_face_iou": 0.849,
+     "all_face_iou": 0.83,
+     "face_recall": 0.934,
+     "absorbed_m2": 6.8,
+     "faces": 7,
+     "false_positive_obstructions": 0,
+     "coverage": 0.928,
+     "height_rmse_m": 0.092,
+     "unmodeled_m2": 6.1
+    }
+   }
+  },
+  "House C vs AI design": {
+   "reference": {
+    "faces": 8,
+    "large": 8,
+    "ours": 7,
+    "obstructions": "2 of 17 found, 1 false positive"
+   },
+   "raw_stage": {
+    "large": 0.79,
+    "all": 0.79,
+    "recall": 0.969
+   },
+   "outline": {
+    "iou": 0.975,
+    "p90_m": 0.29,
+    "max_m": 0.64
+   },
+   "versions": {
+    "fit-1": {
+     "large_face_iou": 0.82,
+     "all_face_iou": 0.82,
+     "face_recall": 0.969,
+     "absorbed_m2": 9.3,
+     "faces": 7,
+     "false_positive_obstructions": 1,
+     "coverage": 0.979,
+     "height_rmse_m": 0.334,
+     "unmodeled_m2": 0.0
+    },
+    "fit-2": {
+     "large_face_iou": 0.82,
+     "all_face_iou": 0.82,
+     "face_recall": 0.969,
+     "absorbed_m2": 9.3,
+     "faces": 7,
+     "false_positive_obstructions": 1,
+     "coverage": 0.979,
+     "height_rmse_m": 0.334,
+     "unmodeled_m2": 0.0
+    },
+    "fit-3": {
+     "large_face_iou": 0.811,
+     "all_face_iou": 0.811,
+     "face_recall": 0.969,
+     "absorbed_m2": 9.3,
+     "faces": 7,
+     "false_positive_obstructions": 1,
+     "coverage": 0.952,
+     "height_rmse_m": 0.172,
+     "unmodeled_m2": 8.1
+    },
+    "fit-4": {
+     "large_face_iou": 0.792,
+     "all_face_iou": 0.792,
+     "face_recall": 0.969,
+     "absorbed_m2": 9.3,
+     "faces": 7,
+     "false_positive_obstructions": 1,
+     "coverage": 0.949,
+     "height_rmse_m": 0.045,
+     "unmodeled_m2": 0.0
+    },
+    "fit-5": {
+     "large_face_iou": 0.792,
+     "all_face_iou": 0.792,
+     "face_recall": 0.969,
+     "absorbed_m2": 9.3,
+     "faces": 7,
+     "false_positive_obstructions": 1,
+     "coverage": 0.949,
+     "height_rmse_m": 0.045,
+     "unmodeled_m2": 0.0
+    },
+    "fit-6": {
+     "large_face_iou": 0.795,
+     "all_face_iou": 0.795,
+     "face_recall": 0.969,
+     "absorbed_m2": 9.3,
+     "faces": 7,
+     "false_positive_obstructions": 1,
+     "coverage": 0.95,
+     "height_rmse_m": 0.056,
+     "unmodeled_m2": 0.0
+    }
+   }
+  }
+ }
+}

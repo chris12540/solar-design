@@ -21,7 +21,7 @@ from shapely.geometry import Point, Polygon, shape
 from shapely.ops import transform as transform_geometry
 
 
-ALGORITHM_VERSION = "roof-4"
+ALGORITHM_VERSION = "roof-5"
 MAX_FACES = 32
 MAX_CANDIDATES = 32
 MAX_RING_VERTICES = 1200
@@ -372,14 +372,21 @@ def reconstruct(inputs: dict[str, Any], home: dict[str, Any]) -> dict[str, Any]:
         emitted_face_polygons: list[Polygon] = []
         invalid_geometry_withheld = False
         bounds_values: list[tuple[float, float]] = [(px, py) for px, py in outline_rings[0]]
+        pieces = []
         for geom, label in shapes(labels, mask=labels > 0, transform=transform, connectivity=4):
-            plane_idx = int(label) - 1
             poly = shape(geom)
-            if poly.is_empty or poly.area < pixel_area * 0.5:
-                continue
-            if len(faces) >= MAX_FACES:
-                warnings.append("Output face count was capped.")
-                break
+            if not poly.is_empty and poly.area >= pixel_area * 0.5:
+                pieces.append((poly, label))
+        if len(pieces) > MAX_FACES:
+            # The scan runs top to bottom, so cutting it off would drop whatever lies below the first
+            # fragments. A roof turned off the pixel grid leaves hundreds of one-pixel stair steps
+            # along its hips and ridges, enough to use every slot before the main planes are reached.
+            keep = set(sorted(range(len(pieces)), key=lambda i: (-pieces[i][0].area, i))[:MAX_FACES])
+            dropped = sum(p.area for i, (p, _) in enumerate(pieces) if i not in keep)
+            warnings.append(f"Output face count was capped: {len(pieces) - MAX_FACES} smaller face(s) totalling {dropped:.1f} m2 were dropped.")
+            pieces = [piece for i, piece in enumerate(pieces) if i in keep]
+        for poly, label in pieces:
+            plane_idx = int(label) - 1
             rings = _local_polygon(poly, origin, tolerance)
             if rings is None:
                 return _unavailable("A roof face has too many holes or vertices to represent safely.")

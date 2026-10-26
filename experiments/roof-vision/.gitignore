@@ -14,3 +14,6 @@ summary.json
 reference.json
 phase1-reference.json
 provenance.json
+
+# Aurora benchmark: real designs, saved results and baselines stay private
+aurora-benchmark/private/

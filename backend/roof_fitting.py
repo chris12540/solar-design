@@ -3,7 +3,8 @@
 The source reconstruction is never edited. A line arrangement gives every face
 one shared topology; plane intersections are preferred over raster stair steps.
 Photo gradients can move a proposed line only inside its geometric uncertainty.
-They never supply height or authorize a roof outside DSM support.
+They never supply height or authorize a roof outside DSM support. A face never
+claims pixels its own plane does not explain; those become unmodeled regions.
 """
 from __future__ import annotations
 
@@ -13,20 +14,43 @@ from typing import Any
 import numpy as np
 from pyproj import CRS, Transformer
 from rasterio import Affine, band
-from rasterio.features import rasterize
+from rasterio.features import rasterize, shapes
 from rasterio.io import MemoryFile
 from rasterio.windows import from_bounds, Window
 from rasterio.enums import Resampling
 from rasterio.warp import reproject
 from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import shape as geometry_of
 from shapely import union_all
 from shapely.ops import polygonize, unary_union
 
+from .roof_cleanup import straighten_fit
+from .roof_plausibility import assess
 from .roof_refinement import _model, _poly, _polygons, _record, _plane_intersection, _edge_kind
 
-ALGORITHM_VERSION = "fit-1"
+ALGORITHM_VERSION = "fit-8"
 MAX_FACES = 128
 MAX_CELLS = 4096
+RETENTION_MIN = .5   # a plane group keeping less of its source area than this is reported as degraded
+UNMODELED_RESIDUAL_M = .35   # same limit the raw stage uses to assign a pixel to a plane
+MIN_UNMODELED_M2 = .5
+UNMODELED_OPEN_PX = 1        # opening radius that drops seam noise thinner than this
+KIND_RESIDUAL_M = .5         # mean residual beyond which an unmodeled region is raised or recessed
+RIDGE_REACH_M = 1.5          # how far past its supported span a ridge may run to meet another line
+MIXED_CELL_M2 = .5           # a cell is mixed when two sources each have at least this much in it ...
+MIXED_SHARE = .15            # ... and at least this share of their own area (a sliver of a big face is just edge noise)
+PIECE_FLOOR_M2 = .1          # smallest source overlap that becomes its own piece
+SLOPE_RADIUS_PX = 2          # local slope is a least-squares plane over a (2r+1)^2 pixel window
+TILT_SEED_GAP = .5           # slope vector differing from the owning face by more than this seeds a tilt region ...
+TILT_GROW_GAP = .3           # ... which then grows over pixels differing by more than this
+TILT_MAX_DISPERSION = .4     # a real facet has one coherent slope; a smoothed crease blends many
+TILT_PITCH_DEG = (8., 45.)   # slope of a plausible facet
+TILT_MIN_SEED_M2 = .5
+TILT_MIN_WIDTH_M = .6        # smoothed creases are long bands only a few pixels wide
+TILT_MIN_REGION_M2 = .8
+TILT_REACH_M = 1.            # how far from its seed a tilt region may grow
+TILT_MAX_TOTAL_FRACTION = .15  # more than this carved as tilt means the height model is unreliable
+MAX_CARVE_FRACTION = .4      # a plane unexplained over more of its area than this is a bad fit, not a few unmodeled regions
 
 
 def _raster(raw, inputs):
@@ -194,14 +218,282 @@ def _groups(faces, shapes, tolerance):
     return groups
 
 
+def _contact_lines(sources, skip, reach, tolerance, minimum):
+    """Source-label boundaries between touching plane groups whose ridge was not accepted.
+
+    A rejected ridge candidate means the plane intersection disagrees with the
+    source labels, so the label boundary is the only evidence separating the two
+    groups. Without it a neighbouring ridge's replacement buffer can erase the
+    boundary, leaving one arrangement cell that mixes both groups, and the whole
+    cell then goes to whichever plane has the lower residual over the mixture.
+    """
+    lines = []
+    for i, a in enumerate(sources):
+        for j in range(i+1, len(sources)):
+            if (i, j) in skip:
+                continue
+            shared = a.boundary.intersection(sources[j].buffer(reach))
+            for part in getattr(shared, 'geoms', [shared]):
+                if part.geom_type == 'LineString' and part.length >= minimum:
+                    lines.append(part.simplify(tolerance, preserve_topology=False))
+    return lines
+
+
+def _retention(source_areas, fitted_areas):
+    """Fitted area as a fraction of each group's source area (1 when the source has none)."""
+    return [fitted/source if source > 0 else 1. for source, fitted in zip(source_areas, fitted_areas)]
+
+
+def _parts(geometry):
+    return list(geometry.geoms) if hasattr(geometry, 'geoms') else [geometry]
+
+
+def _ridge_junctions(ridges, index, reach):
+    """Points where ridge `index` crosses another accepted ridge, with evidence of both within `reach`.
+
+    Hips and the ridge they climb to meet at one point, but each supported span stops where its
+    two faces stop touching, a little short of it. `ridges` holds (line, supported, ...) tuples.
+    """
+    line, supported = ridges[index][:2]
+    points = []
+    for other, (candidate, span, *_) in enumerate(ridges):
+        if other == index:
+            continue
+        hit = line.intersection(candidate)
+        if hit.geom_type == 'Point' and not hit.is_empty and supported.distance(hit) <= reach and span.distance(hit) <= reach:
+            points.append(hit)
+    return points
+
+
+def _trim_ridge(line, supported, network, reach, junctions=()):
+    """The stretch of a plane-intersection line that carries evidence, or None.
+
+    `line` is the full intersection of two planes; only `supported` (where the two faces meet)
+    is evidence of a ridge, hip or valley. Each end then runs on, up to `reach`, to the first
+    line in `network` or the first of `junctions` (points on `line` where another ridge crosses
+    it), so the ridge still meets the boundary or the next ridge. Beyond that the line is
+    dropped: planes intersect forever, faces do not.
+    """
+    start, end = np.array(line.coords[0]), np.array(line.coords[-1])
+    length = float(np.linalg.norm(end-start))
+    if length < 1e-9 or supported.is_empty:
+        return None
+    axis = (end-start)/length
+    spans = [float(np.dot(np.array(p)-start, axis)) for g in _parts(supported) if not g.is_empty for p in g.coords]
+    low, high = max(min(spans), 0.), min(max(spans), length)
+    if high-low < 1e-6:
+        return None
+    meeting = [float(np.dot(np.array(p.coords[0])-start, axis)) for p in junctions]
+
+    def extend(t, sign):
+        origin = start+axis*t
+        hit = LineString([tuple(origin), tuple(origin+sign*axis*reach)]).intersection(network)
+        steps = [float(np.dot(np.array(p)-origin, sign*axis)) for g in _parts(hit) if not g.is_empty for p in g.coords]
+        steps += [(s-t)*sign for s in meeting if 0 <= (s-t)*sign <= reach]
+        steps = [d for d in steps if d >= -1e-9]
+        return t+sign*min(steps) if steps else t
+    return LineString([tuple(start+axis*extend(low, -1)), tuple(start+axis*extend(high, 1))])
+
+
+def _split_mixed(cells, sources, minimum, share, floor):
+    """Split cells that straddle faces, or hold a source plus unclaimed area, into one piece per owner.
+
+    A cell goes whole to one plane. A cell straddling two faces gives the smaller one away, and
+    a cell holding one face plus area no plane claims would absorb that area into the face.
+    A source counts as straddled only if the cell holds `minimum` m2 of it and `share` of its
+    area, so edge noise around a correctly straight ridge does not undo the ridge. A cell is also
+    split when `minimum` m2 or more of it is claimed by no source. Pieces keep each source's own
+    area; the unclaimed rest becomes a separate piece that the support rule then leaves empty.
+    """
+    pieces = []
+    for cell in cells:
+        overlap = [(cell.intersection(source), k) for k, source in enumerate(sources)]
+        claimed = [part for part, _ in overlap if part.area >= floor]
+        straddled = sum(1 for part, k in overlap if part.area >= minimum and part.area >= share*sources[k].area) >= 2
+        remainder = cell.difference(unary_union(claimed)) if claimed else cell
+        if not claimed or not (straddled or remainder.area >= minimum):
+            pieces.append(cell)
+            continue
+        for geometry in [*claimed, remainder]:
+            pieces += [g for g in _parts(geometry) if g.geom_type == 'Polygon' and g.area > 1e-7]
+    return pieces
+
+
+def _shift(mask, dy, dx):
+    out = np.zeros_like(mask)
+    h, w = mask.shape
+    out[max(dy, 0):h+min(dy, 0), max(dx, 0):w+min(dx, 0)] = mask[max(-dy, 0):h+min(-dy, 0), max(-dx, 0):w+min(-dx, 0)]
+    return out
+
+
+def _open_mask(mask, radius):
+    """Binary opening with a 3 x 3 element, `radius` times; removes features thinner than 2*radius+1 pixels."""
+    offsets = [(dy, dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1)]
+    for _ in range(radius):
+        mask = mask & np.all([_shift(mask, dy, dx) for dy, dx in offsets], axis=0)
+    for _ in range(radius):
+        mask = mask | np.any([_shift(mask, dy, dx) for dy, dx in offsets], axis=0)
+    return mask
+
+
+def _kind(mean_residual):
+    if mean_residual >= KIND_RESIDUAL_M:
+        return 'raised'
+    return 'recessed' if mean_residual <= -KIND_RESIDUAL_M else 'uneven'
+
+
+def _carve_unmodeled(shape, model, raster, xx, yy):
+    """Remove from `shape` the areas its plane does not explain; return (shape, regions).
+
+    A region is a connected set of valid pixels more than UNMODELED_RESIDUAL_M off the
+    plane (after dropping seam-width noise) and at least MIN_UNMODELED_M2 in area. Without
+    this, a cell that mixes a plane with an adjacent raised section, recess or unmodeled
+    facet gives the whole cell, mixture included, to that plane. If more than
+    MAX_CARVE_FRACTION of the face would go, the plane itself is wrong: nothing is carved
+    and the height error stays visible in the quality figures.
+    """
+    data, valid, transform = raster
+    if shape.is_empty:
+        return shape, []
+    inside = rasterize([(shape, 1)], out_shape=data.shape, transform=transform, dtype='uint8').astype(bool) & valid
+    residual = data - (model[0]*xx + model[1]*yy + model[2])
+    bad = _open_mask(inside & (np.abs(residual) > UNMODELED_RESIDUAL_M), UNMODELED_OPEN_PX)
+    if not bad.any():
+        return shape, []
+    regions = []
+    for geom, _ in shapes(bad.astype('uint8'), mask=bad, transform=transform, connectivity=8):
+        polygon = geometry_of(geom)
+        if polygon.area < MIN_UNMODELED_M2:
+            continue
+        pixels = rasterize([(polygon, 1)], out_shape=data.shape, transform=transform, dtype='uint8').astype(bool) & bad
+        mean = float(np.mean(residual[pixels]))
+        regions.append(dict(geometry=polygon, area_m2=float(polygon.area), pixels=int(pixels.sum()),
+                            mean_residual_m=mean, max_abs_residual_m=float(np.max(np.abs(residual[pixels]))),
+                            kind=_kind(mean)))
+    removed = unary_union([r['geometry'] for r in regions]) if regions else None
+    if removed is None or removed.intersection(shape).area > MAX_CARVE_FRACTION*shape.area:
+        return shape, []
+    return shape.difference(removed), regions
+
+
+def _box_sum(a, r):
+    """Sum over every (2r+1) x (2r+1) window of `a` (valid positions only)."""
+    k = 2*r+1
+    c = np.cumsum(np.cumsum(np.pad(a, ((r+1, r), (r+1, r))), 0), 1)
+    return c[k:, k:]-c[:-k, k:]-c[k:, :-k]+c[:-k, :-k]
+
+
+def _local_slope(data, valid, transform, radius):
+    """Surface slope (east, north), as rise per metre, from a least-squares plane in a window around each pixel.
+
+    NaN where the window holds too little height data.
+    """
+    v = valid.astype(float)
+    z = np.where(valid, data, 0.).astype(float)
+    rows, cols = (g.astype(float) for g in np.indices(data.shape))
+    n = _box_sum(v, radius)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        mean = lambda q: _box_sum(v*q, radius)/n
+        mc, mr, mz = mean(cols), mean(rows), mean(z)
+        d_col = (mean(cols*z)-mc*mz)/(mean(cols*cols)-mc*mc)       # rise per pixel along columns
+        d_row = (mean(rows*z)-mr*mz)/(mean(rows*rows)-mr*mr)
+        det = transform.a*transform.e-transform.b*transform.d
+        east = (d_col*transform.e-d_row*transform.d)/det           # solve [[a, d], [b, e]] . (east, north) = (d_col, d_row)
+        north = (d_row*transform.a-d_col*transform.b)/det
+    thin = n < .6*(2*radius+1)**2
+    return np.where(thin, np.nan, east), np.where(thin, np.nan, north)
+
+
+def _carve_tilt(shapes_, models_, raster, xx, yy):
+    """Cut out compact areas whose slope disagrees with the face that owns them; return (shapes, regions).
+
+    A hip or small facet next to larger faces fits their planes to within about 10 cm, so no
+    height test sees it, but its tilt is plainly different, and in the smoothed height model that
+    survives as one coherent slope. A region needs a seed (slope far from the owner, coherent, a
+    plausible pitch, wide enough not to be a smoothed crease) and grows over pixels that also
+    disagree. The result is reported as unmodeled, not as a face: the height model is too smooth to
+    give such a facet a trustworthy plane.
+    """
+    data, valid, transform = raster
+    east, north = _local_slope(data, valid, transform, SLOPE_RADIUS_PX)
+    known = ~np.isnan(east)
+    owner = np.full(data.shape, -1)
+    gap = np.zeros(data.shape)
+    owner_height = np.zeros(data.shape)
+    for index, (shape, model) in enumerate(zip(shapes_, models_)):
+        if shape.is_empty:
+            continue
+        mask = rasterize([(shape, 1)], out_shape=data.shape, transform=transform, dtype='uint8').astype(bool) & valid
+        owner[mask] = index
+        owner_height[mask] = (model[0]*xx+model[1]*yy+model[2])[mask]
+        use = mask & known
+        gap[use] = np.hypot(east[use]-model[0], north[use]-model[1])
+    owned = owner >= 0
+    seeds = _open_mask((gap > TILT_SEED_GAP) & owned, 1)
+    grown = _open_mask((gap > TILT_GROW_GAP) & owned, 1)
+    regions = []
+    for geometry, _ in shapes(seeds.astype('uint8'), mask=seeds, transform=transform, connectivity=8):
+        seed = geometry_of(geometry)
+        if seed.area < TILT_MIN_SEED_M2:
+            continue
+        rectangle = seed.minimum_rotated_rectangle
+        if rectangle.geom_type != 'Polygon':
+            continue
+        corners = list(rectangle.exterior.coords)
+        if min(math.dist(corners[0], corners[1]), math.dist(corners[1], corners[2])) < TILT_MIN_WIDTH_M:
+            continue
+        pixels = rasterize([(seed, 1)], out_shape=data.shape, transform=transform, dtype='uint8').astype(bool) & seeds & known
+        if not pixels.any():
+            continue
+        mid_e, mid_n = np.median(east[pixels]), np.median(north[pixels])
+        dispersion = float(np.median(np.hypot(east[pixels]-mid_e, north[pixels]-mid_n)))
+        pitch = math.degrees(math.atan(math.hypot(mid_e, mid_n)))
+        if dispersion > TILT_MAX_DISPERSION or not TILT_PITCH_DEG[0] <= pitch <= TILT_PITCH_DEG[1]:
+            continue
+        near = rasterize([(seed.buffer(TILT_REACH_M), 1)], out_shape=data.shape, transform=transform, dtype='uint8').astype(bool)
+        region = None
+        for geometry, _ in shapes((grown & near).astype('uint8'), mask=grown & near, transform=transform, connectivity=8):
+            piece = geometry_of(geometry)
+            if piece.intersects(seed):
+                region = piece if region is None else region.union(piece)
+        if region is None or region.area < TILT_MIN_REGION_M2:
+            continue
+        inside = rasterize([(region, 1)], out_shape=data.shape, transform=transform, dtype='uint8').astype(bool) & owned
+        offset = (data-owner_height)[inside]
+        regions.append(dict(geometry=region, area_m2=float(region.area), pixels=int(inside.sum()),
+                            mean_residual_m=float(np.mean(offset)), max_abs_residual_m=float(np.max(np.abs(offset))), kind='tilt'))
+    if not regions:
+        return list(shapes_), []
+    cut = unary_union([r['geometry'] for r in regions])
+    if cut.intersection(unary_union(list(shapes_))).area > TILT_MAX_TOTAL_FRACTION*sum(s.area for s in shapes_):
+        return list(shapes_), []
+    return [s.difference(cut) for s in shapes_], regions
+
+
+def _merge_unmodeled(pieces):
+    """Join regions carved from neighbouring faces into one record per connected area."""
+    if not pieces:
+        return []
+    merged = []
+    for area in _polygons(unary_union([p['geometry'] for p in pieces])):
+        members = [p for p in pieces if p['geometry'].intersects(area)]
+        pixels = sum(p['pixels'] for p in members)
+        mean = sum(p['mean_residual_m']*p['pixels'] for p in members)/pixels
+        tilted = sum(p['area_m2'] for p in members if p['kind'] == 'tilt')
+        kind = 'tilt' if tilted >= .5*sum(p['area_m2'] for p in members) else _kind(mean)
+        merged.append(dict(geometry=area, area_m2=float(area.area), mean_residual_m=mean,
+                           max_abs_residual_m=max(p['max_abs_residual_m'] for p in members), kind=kind))
+    return sorted(merged, key=lambda r: -r['area_m2'])
+
+
 def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> dict[str, Any]:
     """Fit an evidence-scored line arrangement in source local projected meters."""
     warnings = []
     result = dict(algorithm_version=ALGORITHM_VERSION, status='unavailable', face_groups=[],
-                  edges=[], warnings=warnings, design_ready=False, quality={
+                  edges=[], unmodeled_regions=[], warnings=warnings, design_ready=False, quality={
                       'coverage_fraction': 0., 'height_rmse_m': None, 'outline_iou': 0.,
                       'max_boundary_deviation_m': 0., 'overlap_area_m2': 0.,
-                      'unexplained_fraction': 1., 'checks_passed': False})
+                      'unexplained_fraction': 1., 'unmodeled_area_m2': 0., 'checks_passed': False})
     if raw.get('status') != 'needs_review':
         warnings.append('A successful raw reconstruction is required for fitting.')
         return result
@@ -254,6 +546,7 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
         lines = [domain.boundary]
         replacements = [[] for _ in groups]
         plane_lines, snapped = 0, 0
+        accepted, ridges = set(), []
         for i, a in enumerate(sources):
             for j in range(i+1, len(sources)):
                 b = sources[j]
@@ -277,15 +570,15 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
                 delta = abs((models[i][0]-models[j][0])*p.x+(models[i][1]-models[j][1])*p.y+models[i][2]-models[j][2])
                 if delta > .12:
                     shifted, used = candidate, False
-                # Extend through the connected outline to reach arrangement nodes;
-                # source support restricts ownership so unrelated wings cannot
-                # be claimed by this plane merely because a line crosses them.
+                # Kept for later: trimmed to its supported span once the other lines are known.
                 components = [p for p in _polygons(domain) if p.distance(a) <= tolerance and p.distance(b) <= tolerance]
-                lines.append(shifted.intersection(unary_union(components)))
+                ridges.append((shifted, supported, unary_union(components)))
                 replacements[i].append(near.buffer(tolerance))
                 replacements[j].append(near.buffer(tolerance))
                 plane_lines += 1
                 snapped += int(used)
+                accepted.add((i, j))
+        lines += _contact_lines(sources, accepted, tolerance*.5, tolerance, max(.5, pixel*3))
         for i, source in enumerate(sources):
             # Keep unsupported breaks, but replace stair-stepped shared ridges as
             # a whole rather than separately simplifying their two sides.
@@ -293,8 +586,14 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
             if replacements[i]:
                 boundary = boundary.difference(unary_union(replacements[i]))
             lines.append(boundary.intersection(domain))
+        network = unary_union(lines)
+        for index, (ridge, span, allowed) in enumerate(ridges):
+            kept = _trim_ridge(ridge, span, network, RIDGE_REACH_M, _ridge_junctions(ridges, index, RIDGE_REACH_M))
+            if kept is not None:
+                lines.append(kept.intersection(allowed))
         cells = [cell for cell in polygonize(union_all(lines,grid_size=1e-7))
                  if domain.covers(cell.representative_point()) and cell.area > 1e-7]
+        cells = _split_mixed(cells, sources, MIXED_CELL_M2, MIXED_SHARE, PIECE_FLOOR_M2)
         if len(cells) > MAX_CELLS or len(cells)*data.size > 40_000_000:
             warnings.append('The line arrangement exceeded the bounded complexity limit.')
             return result
@@ -319,17 +618,40 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
                 errors.append(float(np.square(residual).sum()))
                 absolute_errors.append(np.abs(residual))
                 sampled += len(residual)
-        emitted = []
+        emitted, degraded, carved = [], [], []
+        # Pass one: each face as the cells gave it, minus areas its own plane cannot explain by height.
+        drafts = []
         for index, group in enumerate(groups):
             # Zero-tolerance removes only redundant collinear nodes; independent
             # positive-tolerance simplification would tear shared topology.
             shape = unary_union(assigned[index]).simplify(1e-9, preserve_topology=True)
+            shape, regions = _carve_unmodeled(shape, models[index], raster, xx, yy)
+            carved += regions
+            if _polygons(shape):
+                drafts.append((index, group, shape))
+        # Pass two: then minus areas whose tilt, not height, says they are a different facet.
+        finals, tilt_regions = _carve_tilt([d[2] for d in drafts], [models[d[0]] for d in drafts], raster, xx, yy)
+        carved += tilt_regions
+        # Height error is measured over the faces as emitted, after unexplained areas are carved out.
+        errors, absolute_errors, sampled = [], [], 0
+        for (index, group, _), shape in zip(drafts, finals):
             parts = _polygons(shape)
             if not parts:
                 continue
             representative = faces[group[0]]
             emitted.append(shape)
+            face_pixels = rasterize([(shape, 1)], out_shape=data.shape, transform=transform, dtype='uint8').astype(bool) & valid
+            if face_pixels.any():
+                m = models[index]
+                residual = data[face_pixels]-(m[0]*xx[face_pixels]+m[1]*yy[face_pixels]+m[2])
+                errors.append(float(np.square(residual).sum()))
+                absolute_errors.append(np.abs(residual))
+                sampled += len(residual)
+            retained = _retention([sources[index].area], [shape.area])[0]
+            if retained < RETENTION_MIN:
+                degraded += [str(faces[i].get('source_plane_id', faces[i].get('id', f'plane-{i+1}'))) for i in group]
             result['face_groups'].append(dict(
+                source_retained_fraction=float(retained),
                 id=f'group-{len(emitted)}', parts=[_record(p) for p in parts],
                 source_region_ids=[str(faces[i].get('id', f'region-{i+1}')) for i in group],
                 source_plane_ids=sorted({str(faces[i].get('source_plane_id', faces[i].get('id', f'plane-{i+1}'))) for i in group}),
@@ -381,7 +703,14 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
                     hits.append(photo['gradient'][row, col] >= .04)
             if hits:
                 photo_support = float(np.mean(hits))
+        unmodeled = _merge_unmodeled(carved)
+        unmodeled_area = sum(r['area_m2'] for r in unmodeled)
+        result['unmodeled_regions'] = [
+            dict(id=f'unmodeled-{k+1}', **_record(r['geometry']), area_m2=r['area_m2'], kind=r['kind'],
+                 mean_residual_m=r['mean_residual_m'], max_abs_residual_m=r['max_abs_residual_m'])
+            for k, r in enumerate(unmodeled)]
         result['quality'].update(coverage_fraction=coverage, height_rmse_m=rmse, outline_iou=iou,
+                                 unmodeled_area_m2=unmodeled_area, unmodeled_fraction=unmodeled_area/outline.area,
                                  max_boundary_deviation_m=deviation, overlap_area_m2=max(0., overlap),
                                  unexplained_fraction=max(0., 1-coverage),
                                  height_median_absolute_error_m=float(np.median(absolutes)) if absolutes is not None else None,
@@ -400,15 +729,32 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
         missing_planes = sorted(source_planes-represented)
         result['quality']['unrepresented_source_planes'] = missing_planes
         result['quality']['checks']['source_planes_retained'] = not missing_planes
-        result['quality']['checks_passed'] = result['quality']['checks_passed'] and not missing_planes
+        degraded = sorted(set(degraded)-set(missing_planes))
+        result['quality']['degraded_source_planes'] = degraded
+        result['quality']['checks']['source_regions_retained'] = not degraded
+        result['quality']['checks_passed'] = result['quality']['checks_passed'] and not missing_planes and not degraded
         if missing_planes:
             warnings.append('Some source planes were not retained by the fitted topology: '+', '.join(missing_planes)+'. Their connections remain unresolved.')
+        if degraded:
+            warnings.append('Some source planes kept under half of their original area after fitting: '+', '.join(degraded)+'. Their regions may have been assigned to a neighboring plane.')
+        if unmodeled:
+            kinds = ', '.join(sorted({r['kind'] for r in unmodeled}))
+            warnings.append(f'{len(unmodeled)} unmodeled roof region(s) totalling {unmodeled_area:.1f} m2 ({kinds}) were left out of the faces: '
+                            f'the DSM there is more than {UNMODELED_RESIDUAL_M} m off the neighboring plane. They may be raised sections, objects or facets that are not modeled.')
         if rmse is None or rmse > .35:
             warnings.append(f'Height fit failed the development check (RMSE {rmse:.2f} m; limit 0.35 m).' if rmse is not None else 'Height fit could not be measured.')
         warnings.append('Experimental automatic fitting requires roof and obstruction review; design validation has not passed.')
         if photo is None:
             warnings.append('Aligned RGB evidence was unavailable; photo boundaries were not checked.')
         result['status'] = 'experimental' if emitted else 'unavailable'
+        result['straightened'] = straighten_fit(result['face_groups'], emitted, angle) if emitted else dict(status='skipped', reason='no faces were fitted', face_groups=[])
+        try:       # a report of how the roof compares with how roofs are built; never a reason to lose the fit
+            raw_coverage = (raw.get('quality') or {}).get('polygon_coverage_fraction')
+            result['plausibility'] = dict(
+                fitted=assess(result['face_groups'], outline.area, raw_coverage) if emitted else None,
+                straightened=assess(result['straightened']['face_groups'], outline.area, raw_coverage) if result['straightened']['status'] == 'ok' else None)
+        except Exception as exc:
+            result['plausibility'] = dict(fitted=None, straightened=None, error=type(exc).__name__)
         return result
     except Exception as exc:
         result['face_groups'] = []

@@ -27,6 +27,12 @@ python -m unittest discover -s experiments/roof-vision/roof-fusion -p test_fusio
 python -m unittest discover -s experiments/roof-vision/google-cleanup -p test_cleanup.py -v
 ```
 
+Aurora benchmark (scores a saved reconstruction against an Aurora DXF; see `aurora-benchmark/README.md`):
+
+```sh
+.venv/bin/python -m unittest discover -s experiments/roof-vision/aurora-benchmark -p "test_*.py" -v
+```
+
 Multi-roof acquisition is a paid action. It must be explicitly authorized and bounded before running `acquire.py`; existing authorization and ledgers are local, not bundled. Do not run acquisition to diagnose setup. `run_batch.py` is offline, freezes model/algorithm hashes, and refuses expired inputs. Its current selection stage uses existing local detached-home proxies; actual roof types require inspecting acquired imagery.
 
 Google-derived sources and derivatives retain the original acquisition expiry. Generated experiment files are outside the application's automatic cache purge and require explicit local cleanup. No commercial-use or retention permission is implied by this repository.
