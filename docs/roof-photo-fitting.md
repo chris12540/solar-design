@@ -29,6 +29,12 @@ A hip or small facet beside larger faces fits their planes to within about 10 cm
 
 These are reported as unmodeled, not as faces. In Google's height model a 2 m hip never forms a clean plane (a plane fitted to a seed explains almost nothing beyond it), so a face would need an invented plane. Likewise, a ring around a flat roof that an Aurora design draws as a separate face is coplanar with the roof in the heights and is not separated.
 
+## Ridge junctions (fit-6)
+
+Hips and the ridge they climb to meet at one point, but a ridge's supported span stops where its two faces stop touching, often about a metre short of that point: the height model blurs a 2 m hip and the raw faces end early. In fit-4 and fit-5 the other ridges were not among the lines an end could run on to, so a hip met the ridge only if some boundary line happened to lie ahead. A ridge end now also runs on, within the same 1.5 m reach, to the point where its line crosses another accepted ridge's line, provided both ridges have evidence within 1.5 m of that point. Plane intersections cross everywhere, so a crossing away from the evidence of either ridge is ignored.
+
+On a synthetic hip roof whose raw faces stop 1 m short of the apex, this restores the 9, 9, 21 and 21 m2 faces that fit-5 cut to about 6, 6, 21 and 21 m2 (coverage 0.906 before, 1.0 after).
+
 ## Cost and failure handling
 
 One authorized Data Layers request was used for the sample upgrade; no new Building Insights requests. No retry loop. Optional RGB failure retains acquired DSM/mask inputs. All later fitting checks run on saved bytes. Original sample expiry remains unchanged.

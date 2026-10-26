@@ -240,6 +240,33 @@ def test_trim_ridge_keeps_the_supported_span_and_reaches_the_next_line():
     assert _trim_ridge(line, LineString(), walls, reach=1.) is None
 
 
+def test_trim_ridge_runs_on_to_a_junction_within_reach_and_no_further():
+    from shapely.geometry import MultiLineString, Point
+    from backend.roof_fitting import _trim_ridge
+    line = LineString([(-10, 0), (30, 0)])
+    supported = LineString([(5, 0), (9, 0)])
+    nothing = MultiLineString()
+    meeting = [Point(10.2, 0), Point(4.1, 0), Point(20, 0)]                       # the last is far past the reach
+    trimmed = _trim_ridge(line, supported, nothing, reach=1.5, junctions=meeting)
+    assert sorted(x for x, _ in trimmed.coords) == pytest.approx([4.1, 10.2])
+    assert _trim_ridge(line, supported, nothing, reach=1.5, junctions=[Point(20, 0)]).length == pytest.approx(4)
+    walls = MultiLineString([[(9.5, -5), (9.5, 5)]])                              # the nearer of a wall and a junction wins
+    assert max(x for x, _ in _trim_ridge(line, supported, walls, reach=1.5, junctions=[Point(10.2, 0)]).coords) == pytest.approx(9.5)
+
+
+def test_ridge_junctions_need_evidence_of_both_ridges_near_the_crossing():
+    from backend.roof_fitting import _ridge_junctions
+    ridges = [(LineString([(0, 0), (20, 0)]), LineString([(4, 0), (8, 0)])),
+              (LineString([(9, -10), (9, 10)]), LineString([(9, .5), (9, 2)])),    # crosses at (9, 0), 1 m from each span
+              (LineString([(11, -10), (11, 10)]), LineString([(11, 3), (11, 6)])),  # crosses at (11, 0), 3 m from each span
+              (LineString([(0, 5), (20, 5)]), LineString([(4, 5), (8, 5)]))]        # parallel to the first ridge: never crosses it
+    near = _ridge_junctions(ridges, 0, reach=1.5)
+    assert [(round(p.x, 6), round(p.y, 6)) for p in near] == [(9., 0.)]
+    assert _ridge_junctions(ridges, 1, reach=1.5)[0].equals(near[0])
+    assert [(round(p.x), round(p.y)) for p in _ridge_junctions(ridges, 0, reach=3.5)] == [(9, 0), (11, 0)]
+    assert [(round(p.x), round(p.y)) for p in _ridge_junctions(ridges, 3, reach=3.5)] == [(9, 5), (11, 5)]   # the two verticals, not the parallel ridge
+
+
 def test_split_mixed_cells_gives_each_source_its_own_piece():
     from backend.roof_fitting import _split_mixed
     cell = box(0, 0, 10, 10)
@@ -306,6 +333,20 @@ def test_hip_roof_keeps_four_faces_with_straight_hips():
     assert result['quality']['height_rmse_m'] < .05
     assert result['quality']['coverage_fraction'] > .95
     assert result['unmodeled_regions'] == []
+
+
+def test_hip_roof_whose_raw_faces_stop_short_of_the_apex_still_closes_it():
+    """Real raw faces end before the point where hips meet; without junctions the hips dangle and the triangles lose a third of their area."""
+    raw, inputs = _hip_roof()
+    cut = 1.
+    outlines = {'north': [(-5, 3), (5, 3), (2+cut, 0), (-2-cut, 0)], 'south': [(-5, -3), (5, -3), (2+cut, 0), (-2-cut, 0)],
+                'east': [(5, -3), (5, 3), (2+cut, 0)], 'west': [(-5, -3), (-5, 3), (-2-cut, 0)]}
+    for face in raw['faces']:
+        face['polygon'] = list(Polygon(outlines[face['id'].split('-')[1]]).exterior.coords)
+    result = fit(raw, inputs, {})
+    areas = sorted(round(a, 1) for a in (s.area for s in _shapes(result)))
+    assert areas == pytest.approx([9., 9., 21., 21.], abs=.5)
+    assert result['quality']['coverage_fraction'] > .98
 
 
 def _blur(array, radius=2):

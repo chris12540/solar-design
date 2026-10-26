@@ -26,7 +26,7 @@ from shapely.ops import polygonize, unary_union
 
 from .roof_refinement import _model, _poly, _polygons, _record, _plane_intersection, _edge_kind
 
-ALGORITHM_VERSION = "fit-5"
+ALGORITHM_VERSION = "fit-6"
 MAX_FACES = 128
 MAX_CELLS = 4096
 RETENTION_MIN = .5   # a plane group keeping less of its source area than this is reported as degraded
@@ -246,13 +246,31 @@ def _parts(geometry):
     return list(geometry.geoms) if hasattr(geometry, 'geoms') else [geometry]
 
 
-def _trim_ridge(line, supported, network, reach):
+def _ridge_junctions(ridges, index, reach):
+    """Points where ridge `index` crosses another accepted ridge, with evidence of both within `reach`.
+
+    Hips and the ridge they climb to meet at one point, but each supported span stops where its
+    two faces stop touching, a little short of it. `ridges` holds (line, supported, ...) tuples.
+    """
+    line, supported = ridges[index][:2]
+    points = []
+    for other, (candidate, span, *_) in enumerate(ridges):
+        if other == index:
+            continue
+        hit = line.intersection(candidate)
+        if hit.geom_type == 'Point' and not hit.is_empty and supported.distance(hit) <= reach and span.distance(hit) <= reach:
+            points.append(hit)
+    return points
+
+
+def _trim_ridge(line, supported, network, reach, junctions=()):
     """The stretch of a plane-intersection line that carries evidence, or None.
 
     `line` is the full intersection of two planes; only `supported` (where the two faces meet)
     is evidence of a ridge, hip or valley. Each end then runs on, up to `reach`, to the first
-    line in `network`, so the ridge still meets the boundary or the next ridge. Beyond that
-    the line is dropped: planes intersect forever, faces do not.
+    line in `network` or the first of `junctions` (points on `line` where another ridge crosses
+    it), so the ridge still meets the boundary or the next ridge. Beyond that the line is
+    dropped: planes intersect forever, faces do not.
     """
     start, end = np.array(line.coords[0]), np.array(line.coords[-1])
     length = float(np.linalg.norm(end-start))
@@ -263,11 +281,13 @@ def _trim_ridge(line, supported, network, reach):
     low, high = max(min(spans), 0.), min(max(spans), length)
     if high-low < 1e-6:
         return None
+    meeting = [float(np.dot(np.array(p.coords[0])-start, axis)) for p in junctions]
 
     def extend(t, sign):
         origin = start+axis*t
         hit = LineString([tuple(origin), tuple(origin+sign*axis*reach)]).intersection(network)
         steps = [float(np.dot(np.array(p)-origin, sign*axis)) for g in _parts(hit) if not g.is_empty for p in g.coords]
+        steps += [(s-t)*sign for s in meeting if 0 <= (s-t)*sign <= reach]
         steps = [d for d in steps if d >= -1e-9]
         return t+sign*min(steps) if steps else t
     return LineString([tuple(start+axis*extend(low, -1)), tuple(start+axis*extend(high, 1))])
@@ -565,8 +585,8 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
                 boundary = boundary.difference(unary_union(replacements[i]))
             lines.append(boundary.intersection(domain))
         network = unary_union(lines)
-        for ridge, span, allowed in ridges:
-            kept = _trim_ridge(ridge, span, network, RIDGE_REACH_M)
+        for index, (ridge, span, allowed) in enumerate(ridges):
+            kept = _trim_ridge(ridge, span, network, RIDGE_REACH_M, _ridge_junctions(ridges, index, RIDGE_REACH_M))
             if kept is not None:
                 lines.append(kept.intersection(allowed))
         cells = [cell for cell in polygonize(union_all(lines,grid_size=1e-7))
