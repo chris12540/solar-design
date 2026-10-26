@@ -35,6 +35,22 @@ Hips and the ridge they climb to meet at one point, but a ridge's supported span
 
 On a synthetic hip roof whose raw faces stop 1 m short of the apex, this restores the 9, 9, 21 and 21 m2 faces that fit-5 cut to about 6, 6, 21 and 21 m2 (coverage 0.906 before, 1.0 after).
 
+## Straight edges (fit-7)
+
+The fit traces faces from a 10 cm raster, so a 10 m edge can carry 25 vertices in a stair. After the fit, `backend/roof_cleanup.py` builds a second set of face groups, `fitting.straightened`, whose edges are straight like a drawn roof. The fit's own `face_groups` are unchanged and remain what the benchmark scores as `fitted`; `straightened` is scored as its own stage. The app shows it by default, behind a "Straight edges" checkbox.
+
+Everything is done in the roof's own frame (the outline's dominant direction along x), on the edges the faces share, so neighbours keep tiling:
+
+1. The face boundaries are noded so each shared edge appears once, then split into chains that run from junction to junction.
+2. Each chain is simplified (Douglas-Peucker, 0.25 m) to a few segments. A segment of 1 m or more within 10 degrees of 0, 45, 90 or 135 degrees is made exactly that direction, through the median of the points it replaces; other segments keep their fitted direction.
+3. A short jog between two parallel segments less than 0.5 m apart becomes one line. A run of short segments (1.6 m or less in all) cutting a corner between two long edges is replaced by the two lines' intersection, so rounded corners square off. Collinear edges meeting at a junction share one line.
+4. Each junction is placed at the least-squares point of the edges that end there, if that is within 0.7 m of where it was. Corners are the intersections of consecutive lines, with the same limit.
+5. Faces are rebuilt from the new lines and given back to the fitted face they overlap most. An opening the rebuilt faces now cover is cut out again.
+
+A straightened result is only used if every face survives, each still overlaps its fitted face by at least 0.6, the faces together change area by at most 3% and do not overlap. Otherwise `straightened.status` is `skipped` with the reason, and the app shows the fit. A failure in this step never affects the fit.
+
+On the five houses scored so far it keeps 8-25% of the fit's vertices, puts 79-92% of the edge length in straight runs of a metre or more (9-61% before), changes total roof area by under 2 m2 and leaves large-face IoU against the Aurora designs level or higher (0.000 to +0.007). Corners that are cut at an angle and are not short, and faces the fit itself gets wrong (teeth beside a chimney, irregular patio covers), stay as they are.
+
 ## Cost and failure handling
 
 One authorized Data Layers request was used for the sample upgrade; no new Building Insights requests. No retry loop. Optional RGB failure retains acquired DSM/mask inputs. All later fitting checks run on saved bytes. Original sample expiry remains unchanged.

@@ -5,7 +5,7 @@ from pathlib import Path
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
-STAGES = ('raw', 'refined', 'fitted')
+STAGES = ('raw', 'refined', 'fitted', 'straightened')
 
 
 class ResultFormatError(ValueError):
@@ -27,7 +27,7 @@ class OurRoof:
     meta: dict = field(default_factory=dict)
 
     def polygons(self, stage):
-        return {k: f.polygon for k, f in self.stages[stage].items()}
+        return {k: f.polygon for k, f in self.stages.get(stage, {}).items()}
 
     def orientation(self, stage):
         return {k: (f.azimuth_deg, f.pitch_deg) for k, f in self.stages[stage].items()}
@@ -81,6 +81,9 @@ def from_result(data):
                   'fitted': _groups(data['fitting']['face_groups'], 'fitting')}
     except KeyError as exc:
         raise ResultFormatError(f'result lacks {exc}') from None
+    straightened = data['fitting'].get('straightened') or {}
+    if straightened.get('status') == 'ok':
+        stages['straightened'] = _groups(straightened['face_groups'], 'straightened')
     outline = None
     if data.get('roof_outline'):
         outline = _poly(data['roof_outline'], 'roof_outline')

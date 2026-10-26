@@ -18,6 +18,10 @@ HOUSES = sorted(p for p in PRIVATE.glob('*/') if (p / 'design.dxf').exists() and
 
 RAW_TOLERANCE = .03   # fitting may not leave large faces this far below the raw stage it starts from
 MAX_ABSORBED_FRACTION = .03   # share of the roof: unreproduced Aurora faces swallowed by neighbouring faces (fit-1: 7.6%, fit-4: 4.1% on the human design)
+STRAIGHT_VERTEX_SHARE = .4          # straightened faces keep under this share of the fit's vertices (real houses: 8-25%)
+STRAIGHT_LONG_EDGE_SHARE = .75      # and at least this share of their edge length lies in straight runs of 1 m or more (real houses: 79-92%)
+STRAIGHT_MIN_FACE_OVERLAP = .8      # every face still overlaps its fitted face this much (real houses: 0.86 or more)
+STRAIGHT_IOU_SLACK = .01            # straightening may not cost more than this in large-face IoU against the reference
 LARGE_FACE_M2 = 10.   # a face this big that is not reproduced at IoU >= 0.5 is a defect, not noise
 
 
@@ -66,6 +70,22 @@ class PrivateGoldenTests(unittest.TestCase):
                 stages = _scored(house)['stages']
                 raw, fitted = stages['raw']['large_area_weighted_best_iou'], stages['fitted']['large_area_weighted_best_iou']
                 self.assertGreaterEqual(fitted, raw - RAW_TOLERANCE, 'fitting made the large faces clearly worse than the raw stage')
+
+    def test_straightened_faces_are_straighter_and_no_less_accurate(self):
+        for house in HOUSES:
+            with self.subTest(house=house.name):
+                straight = json.loads((house / 'result.json').read_text())['fitting'].get('straightened') or {}
+                if 'status' not in straight:
+                    self.skipTest(f'{house.name}: result.json predates the straightened stage; re-export it')
+                self.assertEqual(straight['status'], 'ok', straight.get('reason'))
+                quality = straight['quality']
+                self.assertLess(quality['vertex_count'], STRAIGHT_VERTEX_SHARE * quality['source_vertex_count'])
+                self.assertGreaterEqual(quality['long_edge_share'], STRAIGHT_LONG_EDGE_SHARE)
+                self.assertGreater(quality['min_face_overlap'], STRAIGHT_MIN_FACE_OVERLAP)
+                stages = _scored(house)['stages']
+                self.assertGreaterEqual(stages['straightened']['large_area_weighted_best_iou'],
+                                        stages['fitted']['large_area_weighted_best_iou'] - STRAIGHT_IOU_SLACK,
+                                        'straightening made the large faces worse than the fit it was made from')
 
 
 if __name__ == '__main__':

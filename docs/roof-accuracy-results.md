@@ -102,6 +102,22 @@ On house C trimming costs 0.012, about the size of the first piece above: withou
 
 The last figure is the real output of `fit-4` and `fit-5` on the synthetic roof used by `test_fit_leaves_a_hip_sized_tilt_change_unmodeled`. The other two are illustrations, not measured data.
 
+## Straight edges (fit-7)
+
+`fit-7` adds a straightened copy of the faces beside the fit (see [`roof-photo-fitting.md`](roof-photo-fitting.md)). Large-face IoU against the Aurora designs, fitted stage and straightened stage, with the vertices and the share of edge length lying in straight runs of 1 m or more:
+
+| Case | Fitted | Straightened | Vertices (fit -> straightened) | Edge length in straight runs |
+|---|---|---|---|---|
+| House A vs AI design | 0.869 | **0.873** | 558 -> 138 | 58% -> 85% |
+| House B vs AI design | 0.814 | **0.815** | 584 -> 103 | 57% -> 87% |
+| House B vs human design | 0.849 | **0.856** | 584 -> 103 | 57% -> 87% |
+| House C vs AI design | 0.795 | **0.801** | 720 -> 87 | 61% -> 92% |
+| House D vs design | 0.832 | 0.832 | 2,247 -> 186 | 9% -> 79% |
+
+House D is a fourth house, scored for the first time here, and none of the fixes were tuned on it. It is turned about 41 degrees from the map grid, so it is the case that needs the roof's own frame: snapping to the map's axes (an earlier prototype) cost 0.001-0.009 on the other houses and could not straighten its diagonal edges. Its design has no obstructions drawn, so obstructions are not scored. Our outline there is larger than the design's by about 65 m2, nearly all of it low roofs (a 29 m2 strip and a 12 m2 shallow wing, 0.2-1.5 m above the lowest eave, and part of a 15 m2 flat area) that the design does not contain. Outside those areas the two outlines agree to 99.7%. Whether those are patio covers that belong out of a design is for the owner to say, and the face scores above do not depend on it.
+
+Total roof area is preserved to within 2 m2 on every house, and every face keeps an overlap (IoU) of at least 0.86 with its fitted face. What the straightening does not fix: a 2.5 m2 stray piece beside a chimney that the fit gives to the wrong face, the irregular patio-cover area on house D, chamfered corners longer than 1.6 m, and the small stray teeth where the fit's own faces are wrong.
+
 ## Findings that did not become code
 
 - **A5/A7 (a ring Aurora draws around a flat roof) is not a height defect.** The ring is coplanar with the roof in the heights (median offset -0.02 m, 3 degrees). Only the photo separates them. House C has the same kind of split.

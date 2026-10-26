@@ -24,9 +24,10 @@ from shapely.geometry import shape as geometry_of
 from shapely import union_all
 from shapely.ops import polygonize, unary_union
 
+from .roof_cleanup import straighten_fit
 from .roof_refinement import _model, _poly, _polygons, _record, _plane_intersection, _edge_kind
 
-ALGORITHM_VERSION = "fit-6"
+ALGORITHM_VERSION = "fit-7"
 MAX_FACES = 128
 MAX_CELLS = 4096
 RETENTION_MIN = .5   # a plane group keeping less of its source area than this is reported as degraded
@@ -745,6 +746,7 @@ def fit(raw: dict[str, Any], inputs: dict[str, Any], home: dict[str, Any]) -> di
         if photo is None:
             warnings.append('Aligned RGB evidence was unavailable; photo boundaries were not checked.')
         result['status'] = 'experimental' if emitted else 'unavailable'
+        result['straightened'] = straighten_fit(result['face_groups'], emitted, angle) if emitted else dict(status='skipped', reason='no faces were fitted', face_groups=[])
         return result
     except Exception as exc:
         result['face_groups'] = []

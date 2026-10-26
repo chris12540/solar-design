@@ -49,6 +49,7 @@ type RoofRefinement = {
   warnings?: string[]
   design_ready?: boolean
   candidates?: RoofCandidate[]
+  straightened?: { status: string; reason?: string; face_groups?: RefinedFace[]; quality?: { vertex_count?: number; source_vertex_count?: number; min_face_overlap?: number } }
 }
 export type RoofResult = {
   status: 'needs_review' | 'unavailable'
@@ -105,6 +106,7 @@ function sharedBounds(result: RoofResult): Bounds {
   result.refinement?.inferred_regions?.forEach((part) => { add(part.polygon); part.holes?.forEach(add) })
   result.refinement?.edges?.forEach((edge) => coordinates.push(...edge.coordinates))
   result.fitting?.face_groups?.forEach((group) => group.parts.forEach((part) => { add(part.polygon); part.holes?.forEach(add) }))
+  result.fitting?.straightened?.face_groups?.forEach((group) => group.parts.forEach((part) => { add(part.polygon); part.holes?.forEach(add) }))
   result.fitting?.edges?.forEach((edge) => coordinates.push(...edge.coordinates))
   if (result.photo?.alignment_status === 'georeferenced' && Object.values(result.photo.bounds).every(Number.isFinite)) {
     coordinates.push([result.photo.bounds.min_x, result.photo.bounds.min_y], [result.photo.bounds.max_x, result.photo.bounds.max_y])
@@ -122,6 +124,7 @@ function partPath(part: RefinedPart, bounds: Bounds) {
 function RoofDiagram({ result, view }: { result: RoofResult; view: 'raw' | 'refined' | 'fitted' }) {
   const [showPhoto, setShowPhoto] = useState(true)
   const [showRaw, setShowRaw] = useState(false)
+  const [showStraight, setShowStraight] = useState(true)
   const dialogRef = useRef<HTMLDialogElement>(null)
   const enlargeRef = useRef<HTMLButtonElement>(null)
   const titleId = useId()
@@ -134,7 +137,10 @@ function RoofDiagram({ result, view }: { result: RoofResult; view: 'raw' | 'refi
   const photo = fitted && result.photo?.alignment_status === 'georeferenced' && /^data:image\/(png|jpeg|webp);base64,/.test(result.photo.data_url) && Object.values(result.photo.bounds).every(Number.isFinite) ? result.photo : null
   const faces = (result.faces ?? []).filter((face) => validPolygon(face.polygon))
   const refinement = fitted ? result.fitting : result.refinement
-  const groups = (refinement?.face_groups ?? []).filter((group) => group.parts.some((part) => validPolygon(part.polygon)))
+  const straightGroups = fitted && result.fitting?.straightened?.status === 'ok' ? (result.fitting.straightened.face_groups ?? []) : []
+  const straight = showStraight && straightGroups.length > 0
+  const groups = (straight ? straightGroups : refinement?.face_groups ?? []).filter((group) => group.parts.some((part) => validPolygon(part.polygon)))
+  const groupLabel = fitted ? (straight ? 'Straightened' : 'Fitted') : 'Refined'
   const outline = result.roof_outline && validPolygon(result.roof_outline.polygon) ? result.roof_outline : null
   const obstructions = (result.obstruction_candidates ?? []).filter((item) => validPolygon(item.polygon))
   const bounds = sharedBounds(result)
@@ -151,10 +157,11 @@ function RoofDiagram({ result, view }: { result: RoofResult; view: 'raw' | 'refi
   const diagram = <>
     {fitted && <div className="roof-photo-controls">
       {photo ? <label><input type="checkbox" checked={showPhoto} onChange={(event) => setShowPhoto(event.target.checked)} />Show photo</label> : <span>Photo unavailable</span>}
+      {straightGroups.length > 0 && <label><input type="checkbox" checked={showStraight} onChange={(event) => setShowStraight(event.target.checked)} />Straight edges</label>}
       <label><input type="checkbox" checked={showRaw} onChange={(event) => setShowRaw(event.target.checked)} />Raw overlay</label>
       {photo?.imagery_date && <span>Imagery {photo.imagery_date}</span>}
     </div>}
-    <svg className={`roof-diagram${photo && showPhoto ? ' roof-diagram-photo' : ''}`} viewBox="0 0 360 240" role="img" aria-label={drawRaw ? `Raw roof reconstruction with ${faces.length} regions and ${obstructions.length} obstruction candidates` : `${fitted ? 'Fitted' : 'Refined'} roof with ${groups.length} face groups and proposed edges`}>
+    <svg className={`roof-diagram${photo && showPhoto ? ' roof-diagram-photo' : ''}`} viewBox="0 0 360 240" role="img" aria-label={drawRaw ? `Raw roof reconstruction with ${faces.length} regions and ${obstructions.length} obstruction candidates` : `${groupLabel} roof with ${groups.length} face groups${straight ? '' : ' and proposed edges'}`}>
       <title>Local roof geometry · north is up</title>
       <desc>Experimental roof geometry, displayed in local coordinates. Proposed edges are not verified.</desc>
       <rect x="0" y="0" width="360" height="240" rx="8" className="roof-diagram-bg" />
@@ -172,12 +179,12 @@ function RoofDiagram({ result, view }: { result: RoofResult; view: 'raw' | 'refi
         const d = group.parts.filter((part) => validPolygon(part.polygon)).map((part) => partPath(part, bounds)).join(' ')
         const candidate = !fitted && refinement?.candidates?.find((item) => item.face_id === group.id && item.rank === 1)
         return <g key={group.id}>
-          <path d={d} fill={colors[colorIndex % colors.length]} fillRule="evenodd" stroke="#314c3b" strokeWidth="1.5" className="roof-face-shape"><title>{`${fitted ? 'Fitted' : 'Refined'} face group ${group.id}${candidate ? ' · top ranked' : ''}`}</title></path>
+          <path d={d} fill={colors[colorIndex % colors.length]} fillRule="evenodd" stroke="#314c3b" strokeWidth="1.5" className="roof-face-shape"><title>{`${groupLabel} face group ${group.id}${candidate ? ' · top ranked' : ''}`}</title></path>
           {group.parts.flatMap((part, partIndex) => (part.holes ?? []).filter(validPolygon).map((hole, holeIndex) => <path key={`${partIndex}-${holeIndex}`} d={polygonPath(hole, bounds, 360, 240, 28)} fill="none" stroke="#697970" strokeWidth="1.3" className="roof-hole-outline"><title>Preserved opening · extent remains unknown</title></path>))}
           {candidate && <path d={d} fill="none" fillRule="evenodd" className="roof-candidate-highlight"><title>Top ranked candidate</title></path>}
         </g>
       })}
-      {!drawRaw && (refinement?.edges ?? []).filter((edge) => (fitted || edge.inferred) && edge.coordinates.every((point) => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite))).map((edge) => {
+      {!drawRaw && !straight && (refinement?.edges ?? []).filter((edge) => (fitted || edge.inferred) && edge.coordinates.every((point) => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite))).map((edge) => {
         const points = edge.coordinates.map(project).map((point) => point.join(',')).join(' ')
         return <polyline key={edge.id} points={points} fill="none" className="roof-inferred-edge"><title>{`Proposed ${edge.kind} · not verified`}</title></polyline>
       })}
@@ -191,7 +198,7 @@ function RoofDiagram({ result, view }: { result: RoofResult; view: 'raw' | 'refi
     </svg>
     <div className="roof-legend">
       {drawRaw ? <><span><i style={{background:'#dce2df'}} />Unassigned roof</span><span><i className="roof-legend-face" />Roof faces</span><span><i className="roof-legend-obstruction" />Obstruction candidates</span></>
-        : <><span><i className="roof-legend-face" />{fitted ? 'Fitted' : 'Refined'} face groups</span>{!fitted && <span><i className="roof-legend-unknown" />Unknown / inferred area</span>}<span><i className="roof-legend-edge" />Proposed edge · not verified</span>{!fitted && <span><i className="roof-legend-rank" />Top ranked face</span>}{fitted && showRaw && <span><i className="roof-legend-raw" />Raw regions</span>}{obstructions.length > 0 && <span><i className="roof-legend-obstruction" />Obstruction candidates</span>}</>}
+        : <><span><i className="roof-legend-face" />{groupLabel} face groups</span>{!fitted && <span><i className="roof-legend-unknown" />Unknown / inferred area</span>}{!straight && <span><i className="roof-legend-edge" />Proposed edge · not verified</span>}{!fitted && <span><i className="roof-legend-rank" />Top ranked face</span>}{fitted && showRaw && <span><i className="roof-legend-raw" />Raw regions</span>}{obstructions.length > 0 && <span><i className="roof-legend-obstruction" />Obstruction candidates</span>}</>}
     </div>
     <p className="roof-attribution">Source: Includes solar data from Google</p>
   </>
@@ -333,6 +340,9 @@ export default function RoofInspection({ selection, parcelId }: { selection: Sel
           {showingFitted && <details className="roof-face-list roof-fit-checks"><summary>Experimental · Needs validation</summary>
             <p className="roof-message">Height RMSE {number(result.fitting?.quality?.height_rmse_m, 2)} m · Outline IoU {number(result.fitting?.quality?.outline_iou, 2)} · Overlap {number(result.fitting?.quality?.overlap_area_m2, 2)} m²</p>
             <p className="roof-message">Coverage {percent(result.fitting?.quality?.coverage_fraction)} · Boundary deviation {number(result.fitting?.quality?.max_boundary_deviation_m, 2)} m · Photo contrast at edges {percent(result.fitting?.quality?.photo_edge_support)}</p>
+            {result.fitting?.straightened && <p className="roof-message">{result.fitting.straightened.status === 'ok'
+              ? `Straight edges · ${result.fitting.straightened.quality?.vertex_count ?? '—'} vertices (fit: ${result.fitting.straightened.quality?.source_vertex_count ?? '—'}) · every face keeps ${percent(result.fitting.straightened.quality?.min_face_overlap)} or more of its fitted area`
+              : `Straight edges unavailable: ${result.fitting.straightened.reason ?? 'not produced'}`}</p>}
             <p className="roof-message">{result.fitting?.algorithm_version} · Automated geometry checks {result.fitting?.quality?.checks_passed === true ? 'passed; validation still required' : result.fitting?.quality?.checks_passed === false ? 'need review' : 'unavailable'}</p>
           </details>}
         </div>
