@@ -257,6 +257,38 @@ def test_adjacent_gable_planes_use_bounding_boxes_and_detect_obstruction():
     assert result["obstruction_candidates"]
 
 
+def _smaller_face_scanned_first(monkeypatch):
+    """Make the 191-pixel face of the gable fixture come before the 200-pixel one in the label scan."""
+    real = roof_geometry.shapes
+
+    def scan(source, *args, **kwargs):
+        found = list(real(source, *args, **kwargs))
+        return reversed(found) if np.asarray(source).max() > 1 else iter(found)   # only the plane-label scan, not masks
+    monkeypatch.setattr(roof_geometry, "shapes", scan)
+
+
+def test_face_cap_keeps_the_largest_faces_not_the_first_in_scan_order(monkeypatch):
+    inputs, home = _gable_fixture()
+    _smaller_face_scanned_first(monkeypatch)
+    uncapped = reconstruct(inputs, home)
+    assert [f["pixel_count"] for f in uncapped["faces"]] == [191, 200]
+    assert not any("capped" in w for w in uncapped["warnings"])
+    monkeypatch.setattr(roof_geometry, "MAX_FACES", 1)
+    result = reconstruct(inputs, home)
+    assert [f["pixel_count"] for f in result["faces"]] == [200]
+    assert any("capped" in w and "1 smaller face(s)" in w for w in result["warnings"])
+    _assert_output_polygons_valid(result)
+
+
+def test_face_cap_leaves_the_scan_order_alone_when_nothing_is_dropped(monkeypatch):
+    inputs, home = _gable_fixture()
+    _smaller_face_scanned_first(monkeypatch)
+    monkeypatch.setattr(roof_geometry, "MAX_FACES", 2)
+    result = reconstruct(inputs, home)
+    assert [f["pixel_count"] for f in result["faces"]] == [191, 200]
+    assert not any("capped" in w for w in result["warnings"])
+
+
 def test_invalid_serialized_face_is_withheld(monkeypatch):
     inputs, home = _fixture()
     original = roof_geometry._local_polygon
