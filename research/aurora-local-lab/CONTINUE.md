@@ -1684,3 +1684,29 @@ samples aligned grid into XYZ points (~0.5m spacing for fitting; display subset 
 This is derived raster visualization, not raw LiDAR returns. Continuous height mesh is
 not implemented. Fitting uses robust sampled elevations with fixed XY, not a new image
 recognition model. Keep initial supported scope and ground-reference limitations explicit.
+
+## Ground photo brightness fixed — October 30, 2026
+
+User reported dark imagery. Raw cached PNG is bright; DOM/canvas opacity1 and no
+filter. Focused static inspection found lit ground ShaderMaterial using environment
+lighting. REA summary ev_5b6a504d9a47fa4477c4a57483944b9bc33fedead88f6c618a7ca65f3113a886,
+parent ev_4c474e1263687b0b4a395784634ff9e28e971328e48b2f22526c52ae18558f4c
+analyzes private extracted GroundRenderer slice only (one parsed file, zero parse
+failures, semantic coverage partial/unknown;218 unknowns). Static analysis alone
+does not establish runtime brightness. Retained slice stays under ignored runtime.
+
+Own imagery-session.js adapter now outputs source display RGB on single ground photo
+after scene shading, with feathered image border. Native grid outside image, roof
+materials, geometry, original texture bytes and vendor artifacts remain unchanged.
+Ground material shape is validated; version mismatch fails explicitly. This is a
+version-specific runtime adapter, not a captured vendor-file patch or global gamma
+change. Future multi-image/opacity controls require a separate display design.
+
+Regression `node imagery-brightness-checks.cjs` generates synthetic64x48 gray bands,
+intercepts source/case responses, blocks every POST/external origin, and checks actual
+screenshot pixels against64/128/192/240. Exact values pass at90° and35° camera angles.
+No shader/page errors;16 pre-existing feature-name console warnings separately counted.
+Raster fixture has no georeferencing (expected test-only rasterio warnings). No new
+Google calls. Live cached photo visually verified in a new browser tab; original user
+tab untouched. Final preview uses existing expiry-bound runtime/google-kimberly/preview.png.
+Both vendor SHA256 hashes unchanged. No outstanding work for this brightness fix.

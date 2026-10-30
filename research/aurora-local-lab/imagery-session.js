@@ -1,4 +1,4 @@
-// Transient Google source session. Never writes browser storage or exports a case.
+// Source imagery adapter. Source-case persistence is handled separately.
 const sourceId=new URLSearchParams(location.search).get('google')||'kimberly';
 const sourceQuery='?source='+encodeURIComponent(sourceId);
 export async function loadImageryManifest() {
@@ -52,6 +52,7 @@ export async function mountImagery(engine, manifest) {
     assertFresh();
     if (!texture.isLoaded) throw new Error('Native imagery decoder failed');
     collection.setGroundTextures([texture]);collection.orthoTextureActivityChanged();
+    useUnlitGroundPhoto(engine);
   } catch(error) { URL.revokeObjectURL(url); throw error; }
   // Timers are bounded below browser timeout limits; recheck after tab suspension.
   let timer;
@@ -63,4 +64,37 @@ export async function mountImagery(engine, manifest) {
   check();document.addEventListener('visibilitychange',check);
   window.addEventListener('pagehide',()=>{clearTimeout(timer);URL.revokeObjectURL(url)},{once:true});
   return {widthMeters:manifest.width*manifest.pixelToEditor[0],heightMeters:-manifest.height*manifest.pixelToEditor[4],center:[texture.params.model.x,texture.params.model.y]};
+}
+
+// Aerial photographs already contain real-world lighting. Shading them again with
+// the editor's environment makes tracing unnecessarily dark. Override only the
+// single source image on the ground, leaving native grid and roof materials intact.
+function useUnlitGroundPhoto(engine) {
+  const grounds = engine.dataStore.findAllHeirs('ground');
+  let updated = 0;
+  for (const ground of grounds) {
+    for (const entity of engine.subsystems.entityManager.getEntities(ground) || []) {
+      const material = entity.getComponent('GroundRenderer')?.gridGroundMaterial;
+      if (!material || material.fragmentShader.includes('LAB_UNLIT_PHOTO')) continue;
+      if (!material.uniforms.satMap0 || !material.uniforms.satMap0Opacity || !material.uniforms.uvSat0Defined) throw new Error('Unsupported ground imagery material');
+      const end = material.fragmentShader.lastIndexOf('}');
+      if (end < 0) throw new Error('Unsupported ground imagery shader');
+      const correction = `
+        // LAB_UNLIT_PHOTO: preserve source PNG display RGB, without scene lighting.
+        if (uvSat0Defined > 0.5 && satMap0Opacity > 0.999 &&
+            vUvSat0.x >= 0.0 && vUvSat0.x <= 1.0 &&
+            vUvSat0.y >= 0.0 && vUvSat0.y <= 1.0) {
+          vec4 photo = texture2D(satMap0, vUvSat0);
+          vec2 edgeFade = smoothstep(vec2(0.0), vec2(0.01), vUvSat0) *
+                          smoothstep(vec2(0.0), vec2(0.01), vec2(1.0) - vUvSat0);
+          gl_FragColor = mix(gl_FragColor, vec4(photo.rgb, photo.a * opacity),
+                             edgeFade.x * edgeFade.y * photo.a);
+        }
+      `;
+      material.fragmentShader = material.fragmentShader.slice(0, end) + correction + material.fragmentShader.slice(end);
+      material.needsUpdate = true;
+      updated++;
+    }
+  }
+  if (!updated) throw new Error('Ground imagery renderer unavailable');
 }
