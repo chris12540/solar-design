@@ -16,7 +16,7 @@ export function installIdleDrafts({ readState, serialize, persist, onError, dela
       const json = await serialize();
       const current = readState();
       if (paused || epoch !== generation || !current.ready || key(current) !== token) return;
-      persist(json);
+      await persist(json);
       written = token; diagnostic.writes++; diagnostic.lastError = null;
     } catch (error) {
       if (paused || epoch !== generation) return;

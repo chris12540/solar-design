@@ -1,14 +1,60 @@
-> GitHub source snapshot: independent host/adapters, checks and notes only.
-> Private `runtime/` content (captured Aurora artifacts, Google imagery, native cases
-> and screenshots) is excluded. This checkout cannot run the retained editor without
-> separately supplied artifacts; setup instructions below describe the local lab.
-> Scripts currently reference the original local dependency paths.
->
-> Configure `ROOF_LAB_ADDRESS` and `ROOF_LAB_PARCEL_ID` in your local environment
-> before explicit Google acquisition. Credentials and property inputs are not shipped.
-> Address search and source-aware export are unfinished; current Google view is temporary.
+> Source snapshot: independent adapters, host, tests and notes only.
+> Private `runtime/` content (captured editor artifacts, Google imagery, cases,
+> signatures and screenshots) is excluded. Retained editor requires separately
+> supplied artifacts. Local dependency paths require configuration on another machine.
+> No API credentials or property data are shipped.
 
 # Local roof editor lab
+
+## Current state — October 30, 2026
+
+This section supersedes older restrictions and unfinished-work notes below.
+User authorized the remaining save/export, correction bridge and expanded fitting work.
+No reconstruction algorithm or frozen evaluator was changed. Only production frontend
+`RoofInspection.tsx` and new `RoofBuilderBridge.tsx` connect the tools.
+
+- [x] Google-backed cases: server draft recovery, named checkpoints, outgoing-draft
+  recovery, signed v2 export/import, source/hash/expiry checks, ground reference restore.
+- [x] Generated model -> editable independent faces -> signed corrected case -> original
+  app preview/download in its projected frame with absolute EGM96 elevations.
+- [x] Height fitting: concave outlines, base roofs containing dormers/folds, independent
+  faces; preview, fixed XY, validity checks and one Undo/Redo.
+- [x] Pure geometry/cache tests, browser source-case workflow and actual production
+  bridge component pass. Production frontend build passes. No new Google calls.
+
+Use port 5191 for the editor; port 5173 for production app. In the production roof
+reconstruction panel choose **Edit generated roof**, then **Open roof builder**.
+Matching cached imagery and height reference must already exist. Edit faces, export
+**test case**, then **Import corrected case** in the original app. Returned correction
+is shown separately; original automated reconstruction is not overwritten.
+
+Source cases use `runtime/source-cases/`, never the permanent synthetic browser library.
+Signed files currently reopen only on the same local installation with matching,
+unexpired cached source. Expiry never extends. Downloaded external copies require
+manual deletion by `expiresAt`; the app refuses expired imports. Raw native JSON
+export stays disabled for source sessions because it drops source/expiry metadata.
+Manual synthetic v1 cases retain their existing browser library and JSON export.
+
+Fitting keeps current face heading. On roofs with details, only base roof parameters
+are fitted; dormer/fold slopes remain manual. Insufficient support or invalid resulting
+geometry is refused. Tests establish workflow and known synthetic geometry, not full
+house accuracy or surveyed truth. Continuous height mesh remains **Later** and is not
+part of this completed checklist. Benchmark ingestion/DXF adapter remains separate.
+
+Resume: do not repeat completed work or start optional features automatically. Preserve
+private runtime and all unrelated production changes. Reuse caches. No new property
+acquisition, Aurora account changes, deployment, vendor publication or entitlement
+bypass. Existing explicit Kimberly retry approval persists; no new calls were needed.
+GitHub source branch is `codex/local-roof-editor-lab`; private runtime remains excluded.
+
+Checks: `python3 source-case-checks.py`, `node source-case-flow-checks.cjs`,
+`node height-fit-checks.mjs`, production-venv Python `height-data-checks.py` and
+`model-handoff-checks.py`, `node model-bridge-flow-checks.cjs`,
+`node height-expanded-checks.cjs` (also `--plane`, `--details`). Browser source/bridge
+checks require disposable `LAB_PORT=5193 python3 source-case-test-server.py`; all
+provider acquisition requests are blocked by their test runners. Run browser checks
+serially. Live server restarted after final Python changes; no user tabs reloaded.
+
 
 October 28, 2026. This is an isolated experiment using the captured Aurora CAD
 1.1876.0 client bundle and its datamodel WebAssembly, unchanged. The surrounding
@@ -546,7 +592,7 @@ fetches for the native decoder; no remote source is enabled.
 
 Open `http://127.0.0.1:5191/?google=kimberly` in a separate tab, or choose
 **Address imagery**. This single-address preview uses Google Solar RGB for
-locally configured demo property. Acquisition is explicit CLI only:
+[local test property]. Acquisition is explicit CLI only:
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 /Users/chris/code/solar-designer/.venv/bin/python google-imagery.py
@@ -576,3 +622,65 @@ on refresh/New. Existing manual library and drafts are not loaded or modified.
 Permanent source-aware cases and transfer from the other tool remain unfinished.
 Actual live check: `node google-preview-check.cjs` (local cache reads only).
 Synthetic lifecycle/trace checks: `node imagery-session-checks.cjs` (no Google calls).
+
+
+### Find address and export formats
+
+Use **Find address**, enter street/city/state/postal code, then Search. Select a
+property with Load imagery, then Open image editor. Current editor remains open.
+Local property records supply coordinates first. Other addresses use Google Geocoding
+API, which must be enabled and permitted for the configured server key (or use
+GOOGLE_GEOCODING_API_KEY). Solar API alone accepts coordinates, not address text.
+Reference: https://developers.google.com/maps/documentation/geocoding/guides-v3/requests-geocoding .
+Search and imagery calls may be billed; no request runs while typing or on heartbeat.
+Solar imagery coverage varies by location; only precise geocodes are accepted.
+
+**Export engine JSON** downloads raw native engine data. **Export test case** downloads
+an editable package with native data, roof/wall geometry, metadata and checksums.
+**Open test case** validates and reopens the latter package; it does not open an aerial
+image or raw engine JSON. Existing manual work is preserved before loading a package.
+These controls remain disabled in temporary Google source sessions. General source-
+aware export is unfinished. Old single-address CLI instructions above are historical;
+use Find address for explicit acquisition now. Live cache remains reusable.
+
+
+Current scope is Phoenix-area properties in loaded local parcel data. Find address
+is local-only: no Google Geocoding fallback on missing records or database errors.
+Older fallback/Geocoding setup notes above are historical. Solar API acquisition stays
+explicit after property selection; existing imagery is reused. Missing records show
+coverage guidance; this is not a guarantee of complete metro-area address coverage.
+
+
+### Height data and roof fit
+
+In a Google image editor tab, expand Height data and choose Load heights. This
+explicitly requests Google DSM/mask data if an unexpired matching cache is absent;
+it may incur charges. No acquisition occurs on refresh or heartbeat. Source date
+must match existing image date; source expiry is preserved, never renewed.
+
+Show heights overlays sampled surface elevations as colored 3D points (not a raw
+LiDAR survey). Ground elevation is estimated from non-roof DSM pixels and can be
+adjusted under Height reference. Verify it before relying on modeled heights.
+
+Select one whole four-corner SmartRoof without dormers/folds, then Preview roof fit.
+Preview shows proposed eave heights/slopes and residuals without changing the model.
+Apply fit commits one native edit; Undo restores it. Cancel leaves model unchanged.
+The retained inspector's Fit to LIDAR button opens this same independent preview.
+Standalone roof faces and complex/detailed roofs are not supported by this first fit.
+XY outline/edge directions stay fixed; it does not discover missing faces or prove
+physical accuracy. Samples near face boundaries are excluded; a roof mask and robust
+regression reject unsupported/noisy fits. Ground-reference or geometry changes require
+another preview. Google-derived saving/export remains disabled in temporary sessions.
+
+Checks (synthetic only, no API requests):
+`node height-fit-checks.mjs`, production venv Python `height-data-checks.py`, and
+`node height-tools-checks.cjs` (or `--flat`). Live acquisition currently awaits explicit
+user approval after automatic approval review rejected the external DSM/mask request.
+
+
+Live Kimberly height integration is now verified after explicit acquisition approval.
+Original mask nodata0 is handled as valid non-roof zero; acquired rasters cache before
+processing. Display and one planar-patch fit/Undo/Redo pass using cached Google DSM.
+This is not whole-house accuracy validation. Google supplies raster height map; current
+view shows sampled XYZ points, not a continuous height mesh or original LiDAR returns.
+Earlier pending-approval notices above are historical; necessary Kimberly runs approved.

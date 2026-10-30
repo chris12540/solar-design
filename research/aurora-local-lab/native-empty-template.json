@@ -1,0 +1,83 @@
+{
+  "format_version": "3",
+  "site_json": {
+    "bounds": {
+      "center": {
+        "lat": 0,
+        "lng": 0
+      },
+      "lat": {
+        "distance": 0.00017966409906737844,
+        "max": 0.00008983204953368922,
+        "min": -0.00008983204953368922
+      },
+      "lng": {
+        "distance": 0.00017966409906737847,
+        "max": 0.00008983204953368923,
+        "min": -0.00008983204953368923
+      }
+    },
+    "buildings": [],
+    "lidar": {
+      "offset": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      }
+    },
+    "obstructions": [],
+    "origin": {
+      "lat": 0,
+      "lng": 0
+    },
+    "roofs": [],
+    "savedFromNewCad": true,
+    "setbacks": {
+      "all": 0,
+      "dormers": false,
+      "eaves": 0,
+      "hips": 0,
+      "obstructions": 0,
+      "rakes": 0,
+      "ridges": 0,
+      "valleys": 0
+    },
+    "trees": []
+  },
+  "system_json": {
+    "components": {
+      "arrays": [],
+      "combiner_boxes": [],
+      "connections": [],
+      "dc_optimizers": [],
+      "disconnects": [],
+      "inverters": [],
+      "load_centers": [],
+      "meters": [],
+      "microinverters": [],
+      "modules": [],
+      "service_panels": [],
+      "strings": []
+    },
+    "edge.correspondence": [],
+    "eld": {
+      "objects": {
+        "lines": [],
+        "rectangles": [],
+        "textboxes": []
+      }
+    },
+    "layout": {
+      "fill_zones": [],
+      "walkways": []
+    },
+    "node.correspondence": [],
+    "node.ruler": [],
+    "node.ruler-segment": [],
+    "ruler": [],
+    "ruler-segment": [],
+    "ruler.correspondence": [],
+    "savedFromNewCad": true,
+    "solar-panel.disabled": []
+  }
+}

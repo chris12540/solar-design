@@ -17,51 +17,56 @@ PRODUCTION = Path('/Users/chris/code/solar-designer')
 CACHE = ROOT / 'runtime' / 'google-kimberly'
 
 
-def main():
+def acquire(target, cache):
+    CACHE = Path(cache)
     sys.path.insert(0, str(PRODUCTION))
     from scripts.dev import environment
-    import psycopg
     from backend import solar_roof
     import numpy as np
     import rasterio
     from rasterio.io import MemoryFile
     from rasterio.warp import calculate_default_transform, reproject, Resampling
     config = environment()
-    if urlsplit(config['DATABASE_URL']).hostname not in ('localhost', '127.0.0.1', '::1'):
-        raise RuntimeError('Local database required')
     # Never reacquire on a repeated CLI invocation while an unexpired result exists.
     manifest_path = CACHE / 'manifest.json'
     if manifest_path.exists():
         existing = json.loads(manifest_path.read_text())
         image_path = CACHE/'image.png'
         if datetime.fromisoformat(existing['expiresAt']) > datetime.now(timezone.utc) and image_path.is_file() and hashlib.sha256(image_path.read_bytes()).hexdigest() == existing['pngSha256']:
-            print(json.dumps({'status': 'reused', 'expiresAt': existing['expiresAt']}))
-            return
-        raise RuntimeError('Existing imagery expired; remove it through expiry cleanup before a new explicit acquisition')
-    target_address = config.get('ROOF_LAB_ADDRESS', '').strip()
-    target_parcel = config.get('ROOF_LAB_PARCEL_ID', '').strip()
-    if not target_address or not target_parcel:
-        raise RuntimeError('Configure ROOF_LAB_ADDRESS and ROOF_LAB_PARCEL_ID locally')
-    with psycopg.connect(config['DATABASE_URL'], connect_timeout=5,
-                         options='-c default_transaction_read_only=on -c statement_timeout=10000') as c:
-        row = c.execute('''SELECT ST_AsGeoJSON(county_geometry)::json FROM parcels
-          WHERE address=%s AND parcel_id=%s AND county_geometry IS NOT NULL LIMIT 1''',
-          (target_address.upper(), target_parcel)).fetchone()
-    if not row:
-        raise RuntimeError('Requested parcel unavailable')
+            return existing
+        for name in ('manifest.json', 'image.png', 'preview.png','height.json','height.bin','height-mask.bin','height.bin.pending','height-mask.bin.pending','height.json.pending','height-source.json','height-dsm.tif','height-mask.tif','height-source.json.pending','height-dsm.tif.pending','height-mask.tif.pending'):
+            (CACHE/name).unlink(missing_ok=True)
     key = config.get('GOOGLE_SOLAR_API_KEY', '').strip()
     if not key:
         raise RuntimeError('Google Solar key missing')
-    home = {'geometry': row[0]}
-    parcel, point = solar_roof._point(home)
+    from shapely.geometry import Point
+    if target.get('geometry'):
+        parcel, point = solar_roof._point({'geometry': target['geometry']})
+    else:
+        parcel, point = None, Point(target['longitude'], target['latitude'])
     from urllib.parse import urlencode
     fetched = datetime.now(timezone.utc)
+    if target.get('geocodeFetchedAt'):
+        geocoded=datetime.fromisoformat(target['geocodeFetchedAt'])
+        if geocoded.tzinfo is None or geocoded>fetched or (fetched-geocoded).total_seconds()>900:
+            raise RuntimeError('Address selection expired; search again')
+        fetched=min(fetched,geocoded)
     insights = solar_roof._json_request(solar_roof.INSIGHTS_ENDPOINT + '?' + urlencode({
         'location.latitude': format(point.y, '.8f'), 'location.longitude': format(point.x, '.8f'),
         'requiredQuality': 'HIGH'}), key)
-    center = solar_roof._inside_parcel(insights, parcel)
+    if parcel is not None:
+        center = solar_roof._inside_parcel(insights, parcel)
+    else:
+        import math
+        candidate=insights.get('center',{})
+        lat,lng=candidate.get('latitude'),candidate.get('longitude')
+        center=None
+        if type(lat) in (int,float) and type(lng) in (int,float) and math.isfinite(lat) and math.isfinite(lng):
+            from pyproj import Geod
+            distance=Geod(ellps='WGS84').inv(point.x,point.y,lng,lat)[2]
+            if distance<=25: center=Point(lng,lat)
     if center is None:
-        raise RuntimeError('Google building lies outside requested parcel')
+        raise RuntimeError('Closest Google building did not match selected property')
     layers = solar_roof._json_request(solar_roof.LAYERS_ENDPOINT + '?' + urlencode({
         'location.latitude': format(center.y, '.8f'), 'location.longitude': format(center.x, '.8f'),
         'radiusMeters': '40', 'view': 'IMAGERY_LAYERS', 'requiredQuality': 'HIGH',
@@ -91,10 +96,11 @@ def main():
     expiry = fetched + timedelta(days=30)
     if datetime.now(timezone.utc) >= expiry:
         raise RuntimeError('Source expired during preparation')
-    manifest = {'schema': 'roof-lab-google-preview/v1', 'address': target_address,
+    manifest = {'schema': 'roof-lab-google-preview/v1', 'address': target['address'],
         'fetchedAt': fetched.isoformat(), 'expiresAt': expiry.isoformat(),
         'attribution': 'Source: Includes solar data from Google', 'provider': 'Google Solar API',
         'captureDate': metadata.get('raster_imagery_date'), 'warnings': warnings,
+        'matchMethod': 'parcel-boundary' if parcel is not None else 'within-25m-of-geocoded-address',
         'origin': {'latitude': center.y, 'longitude': center.x}, 'localCRS': local_crs,
         'originalGrid': original_grid, 'width': width, 'height': height,
         'pixelToEditor': [transform.a, transform.b, transform.c+(transform.a+transform.b)/2,
@@ -108,14 +114,13 @@ def main():
         path = CACHE/name
         path.write_bytes(data)
         path.chmod(0o600)
-    print(json.dumps({'status': 'acquired', 'width': width, 'height': height,
-                      'captureDate': manifest['captureDate'], 'expiresAt': manifest['expiresAt'],
-                      'requests': manifest['requests'], 'warnings': warnings}))
+    return manifest
+
 
 
 if __name__ == '__main__':
     try:
-        main()
+        raise RuntimeError('Use address lookup in the local editor to select a property and acquire imagery')
     except Exception as exc:
         # Never print signed URLs, credential-bearing response bodies or tracebacks.
         from urllib.error import HTTPError

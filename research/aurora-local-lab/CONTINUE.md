@@ -1,5 +1,55 @@
 # Continue isolated local roof editor lab
 
+## Current state — October 30, 2026
+
+This section supersedes older restrictions and unfinished-work notes below.
+User authorized the remaining save/export, correction bridge and expanded fitting work.
+No reconstruction algorithm or frozen evaluator was changed. Only production frontend
+`RoofInspection.tsx` and new `RoofBuilderBridge.tsx` connect the tools.
+
+- [x] Google-backed cases: server draft recovery, named checkpoints, outgoing-draft
+  recovery, signed v2 export/import, source/hash/expiry checks, ground reference restore.
+- [x] Generated model -> editable independent faces -> signed corrected case -> original
+  app preview/download in its projected frame with absolute EGM96 elevations.
+- [x] Height fitting: concave outlines, base roofs containing dormers/folds, independent
+  faces; preview, fixed XY, validity checks and one Undo/Redo.
+- [x] Pure geometry/cache tests, browser source-case workflow and actual production
+  bridge component pass. Production frontend build passes. No new Google calls.
+
+Use port 5191 for the editor; port 5173 for production app. In the production roof
+reconstruction panel choose **Edit generated roof**, then **Open roof builder**.
+Matching cached imagery and height reference must already exist. Edit faces, export
+**test case**, then **Import corrected case** in the original app. Returned correction
+is shown separately; original automated reconstruction is not overwritten.
+
+Source cases use `runtime/source-cases/`, never the permanent synthetic browser library.
+Signed files currently reopen only on the same local installation with matching,
+unexpired cached source. Expiry never extends. Downloaded external copies require
+manual deletion by `expiresAt`; the app refuses expired imports. Raw native JSON
+export stays disabled for source sessions because it drops source/expiry metadata.
+Manual synthetic v1 cases retain their existing browser library and JSON export.
+
+Fitting keeps current face heading. On roofs with details, only base roof parameters
+are fitted; dormer/fold slopes remain manual. Insufficient support or invalid resulting
+geometry is refused. Tests establish workflow and known synthetic geometry, not full
+house accuracy or surveyed truth. Continuous height mesh remains **Later** and is not
+part of this completed checklist. Benchmark ingestion/DXF adapter remains separate.
+
+Resume: do not repeat completed work or start optional features automatically. Preserve
+private runtime and all unrelated production changes. Reuse caches. No new property
+acquisition, Aurora account changes, deployment, vendor publication or entitlement
+bypass. Existing explicit Kimberly retry approval persists; no new calls were needed.
+GitHub source branch is `codex/local-roof-editor-lab`; private runtime remains excluded.
+
+Checks: `python3 source-case-checks.py`, `node source-case-flow-checks.cjs`,
+`node height-fit-checks.mjs`, production-venv Python `height-data-checks.py` and
+`model-handoff-checks.py`, `node model-bridge-flow-checks.cjs`,
+`node height-expanded-checks.cjs` (also `--plane`, `--details`). Browser source/bridge
+checks require disposable `LAB_PORT=5193 python3 source-case-test-server.py`; all
+provider acquisition requests are blocked by their test runners. Run browser checks
+serially. Live server restarted after final Python changes; no user tabs reloaded.
+
+
 Updated October 29, 2026. Read this file, `progress.md`, `README.md` and the
 relevant interaction notes before editing. Latest state and resume point are in
 the final completed section; earlier milestones are historical. Earlier milestones remain in progress.md.
@@ -1316,13 +1366,13 @@ behavior; do not rerun broad completed roof matrices.
 
 ## Google address imagery connected; temporary session only
 
-User explicitly authorized Google API acquisition for locally configured demo property, and requested an end-to-end demo tonight. This overrides earlier
+User explicitly authorized Google API acquisition for [local test property], and requested an end-to-end demo tonight. This overrides earlier
 no-paid-acquisition boundary only for this requested property; it does not authorize
 background acquisition, retries on page reads or other addresses. Production repo
 remains read-only. Do not let heartbeat reacquire Google data.
 
 Initial Insights attempts failed HTTP 403 / API_KEY_IP_ADDRESS_BLOCKED. User updated
-key's allowed IP list; current outbound IP observed as [private outbound IP omitted]. After propagation,
+key's allowed IP list; current outbound IP observed as [local outbound IP]. After propagation,
 authorized acquisition succeeded: one successful Building Insights, one Data Layers,
 one RGB download; no DSM/mask downloads or reconstruction. Raster 808×809 after local
 meter reprojection; source capture date 2023-10-17, no source-match warnings. Failed
@@ -1391,21 +1441,246 @@ Address preview opening queued by open_in_codex for this chat; direct URL remain
 http://127.0.0.1:5191/?google=kimberly . Existing user tab/work preserved. Source acquisition remains explicit, never heartbeat.
 
 
-## GitHub branch snapshot
+## GitHub source snapshot published
 
-Branch `codex/local-roof-editor-lab` in chris12540/solar-design contains independent
-source/adapters, verification helpers and notes. Private runtime artifacts, Google
-imagery/cases/screenshots and credentials are excluded. Demo target uses local
-ROOF_LAB_ADDRESS/ROOF_LAB_PARCEL_ID configuration in this public snapshot; personal
-address and outbound IP details are omitted from notes. Fresh checkout is not a
-standalone runnable editor until separately supplied private dependencies exist.
+User requested all lab work on its own GitHub branch. Source/docs committed as
+6fa0d91 on codex/local-roof-editor-lab in chris12540/solar-design, from origin/main.
+Publishing worktree: /Users/chris/.codex/worktrees/local-roof-editor-lab/solar-designer .
+Original running lab/runtime remains here; production accuracy branch untouched.
+Runtime/vendor bundles, source imagery/cases/screenshots and credentials not uploaded.
+Public snapshot omits personal address/IP from notes; acquisition target reads local
+ROOF_LAB_ADDRESS/ROOF_LAB_PARCEL_ID config there. Original live lab source untouched.
+46 files committed; Python/JS syntax and 31 source-free manifest checks pass.
+Do not reacquire data or run the server from a dependency-free publishing checkout.
+Use explicit original lab directory for ongoing running-editor work. No PR created.
 
-The active local server/runtime remains in
-/Users/chris/Documents/ChatGPT/Solar Auto-Estimation/research/aurora-local-lab .
-Use that explicit directory to inspect the running lab; this attached Git worktree
-is a source-only publishing checkout. Never assume its new runtime/input-contract
-synthetic fixture means it contains the real editor dependencies. Preserve both
-locations and unrelated production accuracy work. No heartbeat acquisition.
 
-Publishing checks: every Python and JS-family file parses; 31 source-free manifest
-assertions pass; no credential patterns found; runtime and image paths unstaged.
+## Address lookup implemented; external geocoding access pending
+
+Added Find address dialog, explicit Search, selected-property Load imagery and Open
+image editor link (separate tab). Search reads local parcel records read-only, splits
+and normalizes address tokens, and deduplicates multiple datasets by parcel ID. When
+no local result exists, uses Google Geocoding API with server key fallback. Searches
+run on submit only, never keystrokes. Loading imagery is a separate explicit POST;
+existing property cache reused. No background or heartbeat acquisition authorized.
+
+Own new files: address-lookup.js, address-imagery.py, address-lookup-checks.cjs.
+google-imagery.py is now reusable acquire(target,cache), with no hardcoded address;
+its CLI refuses acquisition and directs users to the lookup UI. Worker selects the
+legacy cached image only when its origin lies inside selected parcel. Other sources
+have stable 32-hex IDs and separate runtime/google-addresses/<id> directories. Native
+source sessions accept those IDs and pass source query to manifest/image routes.
+Server source paths are validated; same-origin JSON POSTs required; search selections
+are unguessable, memory-only, expire after15m; one acquisition at a time. API keys and
+provider URLs remain server-side. Original source dates and30d maximum preserved.
+Google-geocoded locations require a precise rooftop/interpolated result without
+partial_match; nearest Solar building must be within25m. Local parcel selections
+instead require building center inside actual parcel. These checks are not a survey.
+
+Export controls clarified: Export engine JSON = raw native model only. Export test
+case = package with native model, resolved roof/wall geometry, metadata/checksums.
+Open test case validates/reopens that package, not raw engine JSON or imagery. Titles
+and How to model explain difference. Google source sessions still block persistence
+and export; this task does not claim source-aware test packages are finished.
+
+Verification:
+-22547 real local search→deduplicated one result→Load imagery→existing cache→separate
+ native editor passed. Actual source manifest unchanged (no new image acquisition).
+ Invalid/expired selection IDs and source traversal reject; mocked Geocoding denial
+ appears actionable. No native/page errors, external browser requests or CSP errors.
+ Report: runtime/input-contract/address-lookup-checks.json (frozen sources).
+-32019 synthetic --dynamic source ID passes16×12m calibration, pointer tracing,
+ save/export denial, manual-library/draft isolation, New and expiry navigation.
+-6 source-free lookup tests pass: no Google lookup when local match, one fallback
+ on no match, fallback on local DB failure, approximate/partial geocodes filtered,
+ zero results and denied access handled. No network in these unit checks.
+
+One explicit Google Geocoding capability test for existing requested address returned
+GEOCODING_REQUEST_DENIED. Solar API itself already works. User asked why another
+API: Geocoding translates address text into coordinates; Solar accepts coordinates.
+Local parcels provide coordinates already, so no Geocoding needed for those homes.
+General addresses outside local dataset need an address-to-coordinate provider.
+Do not retry Google until user confirms access/config change. Geocoding currently
+uses GOOGLE_GEOCODING_API_KEY, else GOOGLE_MAPS_API_KEY, else GOOGLE_SOLAR_API_KEY.
+No new imagery was acquired in this pass. User has NOT confirmed enabling Geocoding.
+
+Current live server session29247 on5191, original lab directory. No active probes.
+Existing user tabs were not reloaded or edited; new UI appears in fresh/reloaded tabs.
+Published GitHub snapshot6fa0d91 precedes this change; do not claim newer lookup code
+has been pushed. Preserve worktree and private runtime boundaries when syncing.
+Next: resolve whether user wants broader address coverage/enables geocoder, verify
+that route only after config change, then source-aware export/persistent packages.
+No changes to production reconstruction/evaluator or vendor artifacts.
+
+
+## Phoenix scope: address search now local-only
+
+User clarified Phoenix properties only. Active lookup no longer falls back to Google
+Geocoding, including no-match and local DB failure. Uses loaded Phoenix-area parcel
+records; this is not a claim of complete Phoenix coverage or a Phoenix-city boundary
+restriction (existing Glendale case remains supported). Unknown addresses show local
+coverage message. DB failure gets a distinct unavailable message. Solar imagery still
+loads explicitly after selecting a known parcel, with cache reuse/expiry unchanged.
+Dormant google_search helper is not wired into search. Do not enable/retry Geocoding
+or ask user to enable it for current scope. Three mocked backend cases (match, no match,
+DB failure) verify no Google lookup calls. Full address-check rerun pending; see latest completion below for outcome. Current server session71364 on5191.
+Existing user browser tabs not reloaded; save/avoid refreshing unsaved source edits.
+
+Local-only full flow41297 passed: real local parcel lookup, deduplication, unchanged
+existing imagery reuse, separate editor tab, source export blocking, unknown-address
+coverage message and invalid token rejection. No external browser attempts/errors.
+No active probes remain; source-hash report updated. Server71364 remains running.
+
+
+Height-fit capability investigation completed; see height-fitting-findings.md.
+Confirmed captured client BuildingFitLidar + roof/plane Fit to LiDAR controls; own
+adapter disables them. Google DSM can support analogous workflow after registration
+and fitting adapter. No implementation/data acquisition performed; Show LiDAR display
+path and direct native DSM compatibility remain unverified. REA evidence/provenance
+recorded; private excerpts remain ignored. User asked feasibility, not data acquisition.
+
+
+## Height display / selected roof fit implementation
+
+User asked to implement Google DSM height display and roof fitting. New own code:
+height-data.py, height-fit.mjs, height-tools.js, height-data-checks.py,
+height-fit-checks.mjs, height-tools-checks.cjs. Added server height-acquire POST,
+height metadata/binary GET routes; worker dispatch; source-only Height data panel;
+retained SmartRoof Fit to LIDAR button opens own preview when heights loaded. No
+vendor methods patched or elevation getter replaced. Standalone native face fitting
+remains disabled. No production reconstruction/evaluator changes.
+
+Backend: explicit one DataLayers request + DSM/mask downloads, same RGB origin,
+local CRS/pixel-center registration, bilinear DSM / nearest mask,5× subsampling
+(~0.5m), Float32LE heights plus mask. Ground estimate = non-roof20th percentile
+within25m. Unknown mask255 stays distinct from valid ground0 and roof1; initial
+dst_nodata0 incorrectly filled mask, found/fixed by synthetic alignment checks.
+Original image expiry/image hash retained; capture-date mismatch rejected before
+raster downloads; expired sources rejected before network. Height cache hashes
+checked before reuse. Cleanup includes all height files and .pending files. Browser
+checks byte counts/hashes/datum/registration/expiry and exits with source session.
+Height files never enter permanent manual library or exported cases.
+
+Client: colored sampled height-point overlay projected through native camera, not
+native LiDAR data or surveyed accuracy. Ground reference adjustable. Fit supports
+four-corner roofs without dormers/kinks, including flat roofs. Keeps source XY and
+edge directions; independent Huber-style robust 1D regression fits each existing
+face's inward-distance slope and eave height. Excludes roof-mask negatives and face
+boundary0.35m; minimum40 samples, residual/inlier and height/pitch guards. Native CAD
+constructs final geometry. No automatic outline/face discovery. Preview/cancel do
+not mutate; apply checks source snapshot/selection/ground for staleness, commits
+once and checks construction. Rejected native construction triggers Undo. One
+Undo/Redo restores tested complete geometry. Failure/no-op is explicit.
+
+Verification so far:
+- Pure math: known slopes/eave heights recovered with outliers; insufficient,
+ degenerate, masked-only and detailed inputs rejected; flat proposal verified.
+- Synthetic GeoTIFF checks pass: alignment, NaN/nodata handling, ground estimate,
+ exact original expiry, immutable cache reuse, temporal mismatch before download,
+ expired input before network. Synthetic expired-image cleanup removes all height
+ files and staging bytes alongside original source files.
+- Browser11487 passes synthetic pitched hip: 4m eaves/30° recovered, fixed outline,
+ non-mutating preview/cancel, one Undo/Redo, stale preview rejection, reference-change
+ invalidation,8886 colored pixels in3D, empty browser storage/errors/CSP/external
+ attempts. Its report precedes final flat branch/UI word change; final variant run
+ below will establish latest sources. Source hashes frozen in report.
+- Fit-panel mouse events initially cleared native selection; mouse/touch propagation
+ now stopped alongside pointer events. Test also waits native mode transition.
+- Ground input is inside collapsed Height reference; fixture now expands it first.
+
+LIVE ACQUISITION BLOCKED: exec_command automatic approval review rejected requested
+DSM/mask request as not explicitly authorized external paid/location-disclosing action.
+It did not execute; no height data acquired, no costs/API calls from that attempt.
+Do not bypass by invoking through server/another tool/heartbeat. User was shown exact
+permission request for[local test property]: one Data Layers + DSM/mask downloads,
+location sent to Google, potential charges. Approval pending. Complete synthetic
+work and docs; retry ONLY if human explicitly approves. Existing Google RGB unchanged.
+Do not claim live heights loaded or fit improves real-house accuracy.
+
+Current server session12634 on5191. Flat browser run98470 pending at time of note.
+No user tab reloaded or edited. Source-only temporary controls available in fresh tab;
+user must preserve current transient work before refreshing. No GitHub sync since
+source snapshot6fa0d91. Preserve both original lab and publishing worktree.
+
+
+Final height checks complete on frozen sources:
+-34604 flat roof:5m height recovered; native flat-mode source pitch90° preserved,
+ physical surface remains flat. Native uses90° sentinel edges for flat roofs, so fit
+ must not set those edge fields to0°. UI reports physical flat slope0°.
+-97373 pitched hip:4m eaves/30° recovered, exact fixed outline, nonmutating preview/
+ cancel, one Undo/Redo, stale rejection, reference invalidation,8886 overlay pixels.
+-Flat has12797 overlay pixels. Both empty native/page/CSP errors, external attempts
+ and browser storage. Reports runtime/input-contract/height-tools-checks{,-flat}.json
+ pin same final implementation hashes; UI screenshot synthetic only.
+-Pure fit checks and GeoTIFF processing checks pass. Synthetic expired-source cleanup
+ covers height binary/metadata/staging files. No active tests remain.
+
+Current code/server12634 implements requested controls; live test still requires
+pending explicit human approval after auto-review rejection. No DSM/mask request has
+executed and no live pointcloud shown. Do not bypass by clicking live Load heights
+through another tool. If approved, use explicit height-acquire for current source,
+then verify local-cache render without paid retries. Existing user model must remain
+untouched; test independent fresh browser and keep source captures expiry-bound.
+
+
+## First approved live-height attempt and processing fix
+
+Human explicitly approved one Google DataLayers request + DSM/mask downloads for
+Kimberly. Attempt58918 executed and returned INSUFFICIENT_GROUND_SAMPLES during local
+processing, after provider data returned. Earlier implementation discarded raw bytes
+on processing failure; no usable height cache remains from that attempt. Do NOT claim
+network failed or retry that exact one-request approval automatically.
+
+Reproduced failure synthetically with binary mask TIFF declaring nodata0: GDAL treated
+valid zero/non-roof pixels as absent. Fixed by reading mask into array, overriding source
+nodata255 and preserving0=non-roof/1=roof/255=unknown. This reproduces/fixes a concrete bug;
+actual initial raw rasters were not retained, so definitive live cause still unverified.
+height-data-checks.py now uses nodata0 and passes alignment/nodata/ground/cache/expiry.
+
+Added expiry-bound original raster cache BEFORE local processing: height-dsm.tif,
+height-mask.tif, height-source.json, atomic .pending files. Hashes/date/image identity/
+original expiry checked before reprocessing, so future processing fixes reuse raw bytes
+without another Google request. Original height fetchedAt retained across reprocessing.
+Cleanup in server.py/google-imagery.py covers original height bytes and staging files.
+Synthetic cache-reprocessing and full raw-file expiry cleanup pass. Syntax checked.
+Current server session27928 on5191 (previous12634 stopped); no browser tabs reloaded.
+
+Explicit follow-up question asks approval for ONE ADDITIONAL billed/location-disclosing
+retry because first did not retain bytes. Approval is pending. Do not route around via
+browser/server/heartbeat. No new calls after58918. Prepared height-live-check.cjs reads
+local cache only and intercepts height-acquire POST, so it cannot acquire/bill. Run only
+after usable height.json exists, then inspect expiry-bound preview.png. No live fitting
+or geometry-accuracy claim yet; synthetic flat/pitched fitting remains verified.
+
+
+## Live height integration verified; approvals superseded
+
+Human explicitly approved as many runs as needed for this property's height-data
+integration. This supersedes earlier pending one-request/retry approval notes; do
+not ask again for necessary Kimberly runs. Reuse caches rather than rebill. Other
+properties/background acquisition remain outside this specific approval context.
+
+Retry75963 succeeded:25511 valid samples, including5097 roof and20414 non-roof.
+Actual source mask TIFF declares nodata0, confirming reproduced mask-zero bug.
+Root imagery expiry unchanged. Original DSM/mask and metadata now retained privately
+before processing, with checksums/date/source expiry; no provider URLs or keys saved.
+No further Google requests used for verification.
+
+Live display91818 passed from local cache, with acquisition POST intercepted to prevent
+API calls. 3D point overlay verified and expiry-bound preview.png visually inspected.
+Native user model untouched; separate empty test browser, no browser storage or external
+traffic. Local original heights plausible relative to estimated ground, not surveyed.
+
+Live patch fitting17332 passed on a separate temporary four-corner shed over one
+planar portion of the real cached DSM. Test uses a fitted local patch solely to check
+wiring, not whole-house reconstruction or accuracy. Preview nonmutating, applied native
+roof valid, XY unchanged, one Undo/Redo restores geometry, browser storage empty.
+Script height-live-fit-check.cjs is cache-only and intercepts acquisition POST. Never
+publish source samples/screenshots; existing preview.png is under original source expiry.
+
+Current server27928 serves working controls; no active tests. No user tab reloaded.
+User asked whether heights are a map or points: Google supplies DSM raster; own adapter
+samples aligned grid into XYZ points (~0.5m spacing for fitting; display subset for speed).
+This is derived raster visualization, not raw LiDAR returns. Continuous height mesh is
+not implemented. Fitting uses robust sampled elevations with fixed XY, not a new image
+recognition model. Keep initial supported scope and ground-reference limitations explicit.

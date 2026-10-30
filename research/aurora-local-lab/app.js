@@ -1,4 +1,5 @@
-const sourceSession = new URLSearchParams(location.search).get('google') === 'kimberly';
+const sourceId = new URLSearchParams(location.search).get('google');
+const sourceSession = sourceId !== null;
 const logElement = document.querySelector('#log');
 const status = document.querySelector('#status');
 const evidence = window.lab = { events: [], errors: [], blocked: [], stage: 'import' };
@@ -6,7 +7,7 @@ const SAVE_KEY = 'aurora-local-lab:manual-design:v1';
 const LIBRARY_KEY = 'aurora-local-lab:examples:v1';
 const ACTIVE_KEY = 'aurora-local-lab:active-example';
 const DRAFT_KEY = 'aurora-local-lab:tab-draft:v1';
-let drafts;
+let drafts, sourceCases;
 const readDraft = () => {
   try {
     const record = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null');
@@ -55,9 +56,13 @@ class Events {
   }
 }
 
+const { installAddressLookup } = await import('/address-lookup.js');
+installAddressLookup();
+
 try {
   const imageryModule = sourceSession ? await import('/imagery-session.js') : null;
   const imageryManifest = sourceSession ? await imageryModule.loadImageryManifest() : null;
+  if(sourceSession){const {createSourceCases}=await import('/source-cases.js');sourceCases=await createSourceCases(sourceId,imageryManifest);if(sourceCases.record)document.querySelector('#case-name').value=sourceCases.record.name;}
   let originalUi;
   if(!new URLSearchParams(location.search).has('prototype')){
     try { originalUi=await import('/frontend-ui.js').then(module=>module.prepareOriginalUi()); }
@@ -65,6 +70,7 @@ try {
   }
   let startupJson = !sourceSession && (sessionStorage.getItem('aurora-local-lab:reopen') ||
     (!new URLSearchParams(location.search).has('demo') ? readLibrary()[activeId]?.json : undefined));
+  if(sourceSession&&sourceCases.record)startupJson=sourceCases.record.nativeDesignJson;
   if (!sourceSession && !startupJson && new URLSearchParams(location.search).has('demo')) {
     const response = await fetch('/demo.json');
     if (!response.ok) throw new Error('Synthetic demo not generated. Open / for an empty editor.');
@@ -121,7 +127,7 @@ try {
   log('constructed', Object.keys(engine.subsystems));
   evidence.stage = 'initialize';
   const saveHandler = { async save({ jsonToSave }) {
-    if (sourceSession) { status.textContent = 'Preview session: saving is disabled'; return false; }
+    if (sourceSession) {if(window.labHeightTools?.applying)throw new Error('Wait for roof fit to finish before saving.');drafts?.pause();try{const raw=typeof jsonToSave==='string'?jsonToSave:JSON.stringify(jsonToSave);await sourceCases.save(raw,document.querySelector('#case-name').value.trim()||'Untitled example',true);drafts?.markSaved();status.textContent='Source case saved until '+new Date(imageryManifest.expiresAt).toLocaleString();return true;}finally{drafts?.resume();}}
     const json = typeof jsonToSave === 'string' ? jsonToSave : JSON.stringify(jsonToSave);
     const library = readLibrary();
     library[activeId] = { ...(library[activeId] || {}), name: document.querySelector('#case-name').value.trim() || 'Untitled example', json, savedAt: new Date().toISOString(),
@@ -145,17 +151,17 @@ try {
   if (sourceSession) {
     const registration = await imageryModule.mountImagery(engine, imageryManifest);
     evidence.imagery = {active:true, registration, expiresAt:imageryManifest.expiresAt};
-    document.querySelector('#case-name').value = imageryManifest.address;
-    document.querySelector('#case-name').readOnly = true;
+    document.querySelector('#case-name').value = sourceCases.record?.name||imageryManifest.address;
+    document.querySelector('#case-name').readOnly = false;
     const notice = document.createElement('section'); notice.id='source-notice';
     const attribution=document.createElement('span');attribution.textContent='Google Maps';attribution.translate=false;attribution.className='google-attribution';
-    const description=document.createElement('span');description.textContent=`${imageryManifest.attribution} · ${imageryManifest.address} · Temporary preview: edits reset on refresh; saving/export disabled.`;
+    const description=document.createElement('span');description.textContent=`${imageryManifest.attribution} · ${imageryManifest.address} · Source case: saves and test packages expire ${new Date(imageryManifest.expiresAt).toLocaleDateString()}. Raw export disabled.`;
     notice.append(attribution,description);document.body.append(notice);
-    for(const id of ['save','reopen','export','export-case','open-case','case-file','saved-cases'])document.getElementById(id).disabled=true;
-    document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();event.stopImmediatePropagation();status.textContent='Preview session: saving is disabled'}},true);
+    for(const id of ['export'])document.getElementById(id).disabled=true;
+    document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();event.stopImmediatePropagation();window.labAPI?.save().catch(error=>{status.textContent=error.message})}},true);
     document.addEventListener('copy',event=>{event.preventDefault();event.stopImmediatePropagation()},true);
     document.addEventListener('cut',event=>{event.preventDefault();event.stopImmediatePropagation()},true);
-    status.textContent='Google imagery loaded — temporary editing session';
+    status.textContent='Google imagery loaded — expiry-aware source case';await sourceCases.refresh();
   }
   // Pinned native Focus model types; preserve its whole-scene inclusion policy.
   const focusTypes=['roof','roof.plane','tree','obstruction.circle','obstruction.polygon','obstruction.polyline','solar-panel.free','solar-panel.array','existing-solar-panel.free','drone-mesh'];
@@ -206,10 +212,11 @@ try {
     status.textContent = ({drawPitchedRoof:'Click roof corners',drawFlatRoof:'Click roof corners',drawRoofPlane:'Click face corners',undo:'Undo',redo:'Redo',cancelMode:'Ready',setCameraPosition:'View updated',focusOnAll:'View fitted'})[action] || 'Ready';
     document.querySelector('#viewport').focus();
   };
-  window.labAPI = { run, save: () => sourceSession ? Promise.resolve(false) : engine.bridge.save(), cad };
+  window.labAPI = { run, save: () => engine.bridge.save(), cad };
   const { installFoldSurfacePicking } = await import('/fold-placement.js');
   installFoldSurfacePicking(engine);
   if(originalUi)originalUi.mount(engine);
+  if(sourceSession){const {installHeightTools}=await import('/height-tools.js');installHeightTools(engine,imageryManifest,sourceId,sourceCases.context);}
   if (new URLSearchParams(location.search).has('demo')) run('setCameraPosition', { verticalAngle: 35, horizontalAngle: 30 });
   for (const button of document.querySelectorAll('[data-action]')) button.onclick = () => run(button.dataset.action);
   for (const button of document.querySelectorAll('[data-dormer]')) button.onclick = () => run('placeDormer', { type: button.dataset.dormer });
@@ -217,7 +224,7 @@ try {
   document.querySelector('#orbit').onclick = () => run('setCameraPosition', { verticalAngle: 35, horizontalAngle: 30 });
   document.querySelector('#save').onclick = () => window.labAPI.save().catch(error => log('Save failed', error.message));
   document.querySelector('#reopen').onclick = async () => {
-    if (sourceSession) return;
+    if(sourceSession){drafts?.pause();const id=document.querySelector('#saved-cases').value||sourceCases.caseId;try{await sourceCases.reopen(id)}catch(error){drafts?.resume();status.textContent=error.message}return;}
     const id = document.querySelector('#saved-cases').value;
     const record = readLibrary()[id];
     const json = record?.json || localStorage.getItem(SAVE_KEY);
@@ -251,7 +258,7 @@ try {
   document.querySelector('#new-case').onclick = async () => {
     drafts?.pause();
     try {
-      if (sourceSession) { location.assign('/'); return; }
+      if (sourceSession) {await sourceCases.preserve();location.assign('/?google='+encodeURIComponent(sourceId));return;}
       if (engine.dataStore.findAllHeirs('roof').length) await engine.bridge.save();
       sessionStorage.removeItem(ACTIVE_KEY);
       sessionStorage.removeItem('aurora-local-lab:reopen');
@@ -277,11 +284,10 @@ try {
     }
   };
   document.querySelector('#export-case').onclick = async () => {
-    if (sourceSession) return;
     try {
       const { makeTestCase } = await import('/case-export.js');
       const value = await engine.bridge.getJsonToSave();
-      const data = await makeTestCase({ nativeDesignJson: typeof value === 'string' ? value : JSON.stringify(value),
+      const data = sourceSession ? await sourceCases.export(typeof value==='string'?value:JSON.stringify(value),document.querySelector('#case-name').value.trim()||'Untitled example') : await makeTestCase({ nativeDesignJson: typeof value === 'string' ? value : JSON.stringify(value),
         caseId: activeId, engineArtifacts, importedFrom: activeProvenance,
         name: document.querySelector('#case-name').value.trim() || 'Untitled example' });
       const link = document.createElement('a');
@@ -295,7 +301,6 @@ try {
   };
   document.querySelector('#open-case').onclick = () => document.querySelector('#case-file').click();
   document.querySelector('#case-file').onchange = async event => {
-    if (sourceSession) return;
     const file = event.target.files[0];
     if (!file) return;
     const button = document.querySelector('#open-case');
@@ -304,8 +309,11 @@ try {
     delete evidence.caseImportError;
     try {
       if (file.size > 20 * 1024 * 1024) throw new Error('Test case exceeds 20 MB');
+      const packet=JSON.parse(await file.text());
+      if(packet.schema==='roof-lab-case/v2'){const {sourcePacketFromFile,sourceCaseUrl}=await import('/source-cases.js');const opened=await sourcePacketFromFile(packet);if(sourceSession)await sourceCases.preserve();else if(engine.dataStore.findAllHeirs('roof').length)await engine.bridge.save();location.assign(sourceCaseUrl(opened));return;}
+      if(sourceSession)throw new Error('Open manual cases from the manual editor; this image session needs a source package.');
       const { validateTestCase } = await import('/case-export.js');
-      const opened = await validateTestCase(JSON.parse(await file.text()), engineArtifacts);
+      const opened = await validateTestCase(packet, engineArtifacts);
       if (engine.dataStore.findAllHeirs('roof').length) await engine.bridge.save();
       const importedId = crypto.randomUUID(), library = readLibrary();
       library[importedId] = { name: opened.name, json: opened.nativeDesignJson,
@@ -322,25 +330,27 @@ try {
       log('Import failed', error.message);
     } finally { button.disabled = false; event.target.value = ''; }
   };
+  if(sourceSession)document.querySelector('#saved-cases').onchange=async event=>{if(event.target.value)try{drafts?.pause();await sourceCases.switchTo(event.target.value)}catch(error){drafts?.resume();status.textContent=error.message}};
   let pointerEditing = false;
   document.querySelector('#viewport').addEventListener('pointerdown', () => { pointerEditing = true; fitSerial++; }, true);
   document.querySelector('#viewport').addEventListener('wheel', () => { fitSerial++; }, { capture: true, passive: true });
   window.addEventListener('pointerup', () => { pointerEditing = false; }, true);
   window.addEventListener('pointercancel', () => { pointerEditing = false; }, true);
   const { installIdleDrafts } = await import('/tab-drafts.js');
-  drafts = sourceSession ? null : installIdleDrafts({
+  drafts = installIdleDrafts({
     readState: () => {
       const history = engine.state.data.historyData;
       const mode = engine.subsystems.modeManager.actualStateMode;
-      return { revision: history.recentVersion, dirty: history.hasUnsavedChanges,
+      return { revision: history.recentVersion+(sourceSession?JSON.stringify(sourceCases.heightContext()):''), dirty: history.hasUnsavedChanges||(sourceSession&&JSON.stringify(sourceCases.heightContext())!==JSON.stringify(sourceCases.record?.heightContext||{groundElevation:null,heightSha256:null})),
         name: document.querySelector('#case-name').value.trim() || 'Untitled example',
-        ready: !pointerEditing && (mode.endsWith('default-site') || mode.endsWith(':roof') || mode.endsWith(':move.roof')) && engine.dataStore.findAllHeirs('roof').every(r =>
+        ready: !window.labHeightTools?.applying && !pointerEditing && (mode.endsWith('default-site') || mode.endsWith(':roof') || mode.endsWith(':move.roof')) && engine.dataStore.findAllHeirs('roof').every(r =>
           r.isValid !== false && r.isConstructed !== false && !r.error && !r.needsReconstruct) };
     },
     // The save-oriented serializer exits roof editing and can add a history entry.
     // Idle drafts must snapshot committed native models without those actions.
     serialize: async () => { const value = engine.bridge.makeDesignJsonToSave(); return typeof value === 'string' ? value : JSON.stringify(value); },
-    persist: json => {
+    persist: async json => {
+      if(sourceSession){await sourceCases.save(json,document.querySelector('#case-name').value.trim()||'Untitled example',false);status.textContent='Source draft saved until '+new Date(imageryManifest.expiresAt).toLocaleDateString();return;}
       sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ schema: 'roof-lab-tab-draft/v1', caseId: activeId,
         name: document.querySelector('#case-name').value.trim() || 'Untitled example', json, savedAt: new Date().toISOString(),
         importedFrom: activeProvenance, engineArtifacts }));
@@ -352,6 +362,7 @@ try {
     },
     onError: error => { status.textContent = 'Draft could not be saved; use Save locally or Export'; log('Draft save failed', error.message); },
   });
+  if(sourceSession)sourceCases.ready=true;
   evidence.tabDrafts = drafts?.diagnostic || {disabledForSourceSession:true};
   if (evidence.draftRestored) status.textContent = 'Recovered draft from this tab';
   setInterval(() => {

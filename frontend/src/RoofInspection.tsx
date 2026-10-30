@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { Selection } from './HouseSheet'
 import './roofInspection.css'
+import RoofBuilderBridge from './RoofBuilderBridge'
 
 type Point = [number, number]
 type Polygon = Point[]
@@ -319,6 +320,7 @@ export default function RoofInspection({ selection, parcelId }: { selection: Sel
       {!loadingStatus && <p className="roof-message">{model.message || statusText}</p>}
       {!loadingStatus && !model.error && model.status === 'needs_review' && !result && <p className="roof-message">Saved roof status has no geometry result.</p>}
       {result && <>
+        <RoofBuilderBridge result={result} fetchedAt={model.fetched_at} expiresAt={model.expires_at} />
         {hasTabs && <div className="roof-view-tabs" role="tablist" aria-label="Roof geometry view">
           <button type="button" role="tab" id="roof-tab-raw" aria-controls="roof-panel-raw" aria-selected={activeView === 'raw'} tabIndex={activeView === 'raw' ? 0 : -1} onClick={() => setView('raw')} onKeyDown={onViewTabKeyDown}>Raw reconstruction</button>
           {hasRefinedView && <button type="button" role="tab" id="roof-tab-refined" aria-controls="roof-panel-refined" aria-selected={activeView === 'refined'} tabIndex={activeView === 'refined' ? 0 : -1} onClick={() => setView('refined')} onKeyDown={onViewTabKeyDown}>Refined roof</button>}

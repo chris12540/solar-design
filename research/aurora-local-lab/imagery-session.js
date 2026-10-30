@@ -1,6 +1,8 @@
 // Transient Google source session. Never writes browser storage or exports a case.
+const sourceId=new URLSearchParams(location.search).get('google')||'kimberly';
+const sourceQuery='?source='+encodeURIComponent(sourceId);
 export async function loadImageryManifest() {
-  const response = await fetch('/google-imagery.json', { cache: 'no-store' });
+  const response = await fetch('/google-imagery.json'+sourceQuery, { cache: 'no-store' });
   if (!response.ok) throw new Error('Address imagery unavailable. Google API access must be working and imagery acquired first.');
   const manifest = await response.json();
   if (manifest.schema !== 'roof-lab-google-preview/v1' || manifest.provider !== 'Google Solar API' ||
@@ -23,7 +25,7 @@ export async function mountImagery(engine, manifest) {
   const deadline = Date.parse(manifest.expiresAt);
   const assertFresh = () => { if (Date.now() >= deadline) throw new Error('Imagery expired'); };
   assertFresh();
-  const response = await fetch('/google-imagery.png', { cache: 'no-store' });
+  const response = await fetch('/google-imagery.png'+sourceQuery, { cache: 'no-store' });
   if (!response.ok) throw new Error('Imagery bytes unavailable or expired');
   const bytes = await response.arrayBuffer();
   const sha = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(n => n.toString(16).padStart(2,'0')).join('');

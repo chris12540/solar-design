@@ -240,8 +240,8 @@ function mountOriginalRoofUi(engine,require) {
     if(type==='roofs')return React.createElement(React.Fragment,null,
       engine.bridge.serializeSelection().filter(item=>item.type==='roof').length===1&&React.createElement(RoofStarter,{id:engine.bridge.serializeSelection().find(item=>item.type==='roof').data.id}),
       React.createElement(inspectorViews.RoofInspector,{
-      roofs:selection,roofType:selection.inFlatMode?'flat':'pitched',isLidarAvailable:false,lidarTooltip:'No height-data adapter loaded',
-      onEditRoofClicked:action('enterRoofIsolationMode'),onExplodeClicked:action('explodeRoof'),onFitToLidarClicked:()=>{},onMoveClicked:action('moveRoof'),
+      roofs:selection,roofType:selection.inFlatMode?'flat':'pitched',isLidarAvailable:!!window.labHeightTools?.isAvailable,lidarTooltip:'Load Google height data first',
+      onEditRoofClicked:action('enterRoofIsolationMode'),onExplodeClicked:action('explodeRoof'),onFitToLidarClicked:()=>window.labHeightTools?.previewSelected(),onMoveClicked:action('moveRoof'),
       onRoofTypeChanged:type=>engine.triggerAction(type==='flat'?'flattenRoof':'pitchUpRoof'),onRoofUsageTypeToggled:value=>selection.setBuildingUsageType(value?'primary':'accessory'),
     }));
     if(type==='perimeterEdges')return React.createElement(React.Fragment,null,
@@ -252,7 +252,7 @@ function mountOriginalRoofUi(engine,require) {
     if(type==='dormers')return React.createElement(inspectorViews.DormerInspector,{dormers:selection,convertToRoof:action('convertToRoof')});
     return React.createElement(React.Fragment,null,
       React.createElement('p',{className:'local-authoring-hint'},'Drag this face’s outline to resize it. Change its height or pitch below.'),
-      React.createElement(inspectorViews.RoofPlaneInspector,{roofPlanes:selection,isLidarAvailable:false,lidarTooltip:'No height-data adapter loaded',onFitToLidarClicked:()=>{},onMoveClicked:action('moveRoof'),onRoofUsageTypeToggled:value=>selection.setBuildingUsageType(value?'primary':'accessory')}));
+      React.createElement(inspectorViews.RoofPlaneInspector,{roofPlanes:selection,isLidarAvailable:!!window.labHeightTools?.isAvailable,lidarTooltip:'Load Google height data first',onFitToLidarClicked:()=>window.labHeightTools?.previewSelected(),onMoveClicked:action('moveRoof'),onRoofUsageTypeToggled:value=>selection.setBuildingUsageType(value?'primary':'accessory')}));
   }
   function Bridge(){
     const actions=CadContext.jY();

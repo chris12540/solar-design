@@ -1,5 +1,55 @@
 # Next integration boundary
 
+## Current state — October 30, 2026
+
+This section supersedes older restrictions and unfinished-work notes below.
+User authorized the remaining save/export, correction bridge and expanded fitting work.
+No reconstruction algorithm or frozen evaluator was changed. Only production frontend
+`RoofInspection.tsx` and new `RoofBuilderBridge.tsx` connect the tools.
+
+- [x] Google-backed cases: server draft recovery, named checkpoints, outgoing-draft
+  recovery, signed v2 export/import, source/hash/expiry checks, ground reference restore.
+- [x] Generated model -> editable independent faces -> signed corrected case -> original
+  app preview/download in its projected frame with absolute EGM96 elevations.
+- [x] Height fitting: concave outlines, base roofs containing dormers/folds, independent
+  faces; preview, fixed XY, validity checks and one Undo/Redo.
+- [x] Pure geometry/cache tests, browser source-case workflow and actual production
+  bridge component pass. Production frontend build passes. No new Google calls.
+
+Use port 5191 for the editor; port 5173 for production app. In the production roof
+reconstruction panel choose **Edit generated roof**, then **Open roof builder**.
+Matching cached imagery and height reference must already exist. Edit faces, export
+**test case**, then **Import corrected case** in the original app. Returned correction
+is shown separately; original automated reconstruction is not overwritten.
+
+Source cases use `runtime/source-cases/`, never the permanent synthetic browser library.
+Signed files currently reopen only on the same local installation with matching,
+unexpired cached source. Expiry never extends. Downloaded external copies require
+manual deletion by `expiresAt`; the app refuses expired imports. Raw native JSON
+export stays disabled for source sessions because it drops source/expiry metadata.
+Manual synthetic v1 cases retain their existing browser library and JSON export.
+
+Fitting keeps current face heading. On roofs with details, only base roof parameters
+are fitted; dormer/fold slopes remain manual. Insufficient support or invalid resulting
+geometry is refused. Tests establish workflow and known synthetic geometry, not full
+house accuracy or surveyed truth. Continuous height mesh remains **Later** and is not
+part of this completed checklist. Benchmark ingestion/DXF adapter remains separate.
+
+Resume: do not repeat completed work or start optional features automatically. Preserve
+private runtime and all unrelated production changes. Reuse caches. No new property
+acquisition, Aurora account changes, deployment, vendor publication or entitlement
+bypass. Existing explicit Kimberly retry approval persists; no new calls were needed.
+GitHub source branch is `codex/local-roof-editor-lab`; private runtime remains excluded.
+
+Checks: `python3 source-case-checks.py`, `node source-case-flow-checks.cjs`,
+`node height-fit-checks.mjs`, production-venv Python `height-data-checks.py` and
+`model-handoff-checks.py`, `node model-bridge-flow-checks.cjs`,
+`node height-expanded-checks.cjs` (also `--plane`, `--details`). Browser source/bridge
+checks require disposable `LAB_PORT=5193 python3 source-case-test-server.py`; all
+provider acquisition requests are blocked by their test runners. Run browser checks
+serially. Live server restarted after final Python changes; no user tabs reloaded.
+
+
 October 29, 2026. This is a contract/resume note, not an implemented imagery or
 benchmark adapter. Production repository was inspected read-only.
 
