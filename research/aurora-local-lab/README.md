@@ -710,3 +710,31 @@ Raster fixture has no georeferencing (expected test-only rasterio warnings). No 
 Google calls. Live cached photo visually verified in a new browser tab; original user
 tab untouched. Final preview uses existing expiry-bound runtime/google-kimberly/preview.png.
 Both vendor SHA256 hashes unchanged. No outstanding work for this brightness fix.
+
+## House-only connected height surface — October 30, 2026
+
+User explicitly requested restricting dots to target house and connecting them; this
+supersedes the previous Later-only surface scope. Implemented independent display
+mesh in height-surface.mjs, used by height-tools.js and served by server.py.
+
+Select nearest four-connected valid roof-mask region to local address origin, requiring
+at least12 samples and a point within8m. Do not use largest component (often neighbor).
+Neighbor/ground/unknown mask samples stay out of display. Triangles use adjacent grid
+samples only; missing samples and height jumps>2m are not bridged. Diagonal chooses
+smaller height difference. Filled, height-colored mesh with thin edges replaces dots;
+camera-space depth sorting works in2D/3D and original source expiry applies. Fitting
+inputs, model geometry, native Undo and export formats are unchanged.
+
+Pure synthetic regression height-surface-checks.mjs passes: larger neighbor excluded,
+missing/invalid samples skipped, no long triangles, abrupt jumps skipped, distant/no
+roof regions rejected. Existing cached house returns1224 vertices/2284 triangles;
+nearest sample0.255m from origin. Both2D and3D visually verified in separate tab using
+existing case; original user tab untouched. Load heights reused existing cache, no
+new Google calls. Main local server session44683 runs final routes. Preview retained
+only under original expiry-bound runtime/google-kimberly/preview.png.
+
+Limit: mask-connected buildings cannot be separated by this display rule alone. Target
+is selected from address origin, not current individual modeled face. Surface follows
+DSM samples, not an automatic clean roof reconstruction. Canvas reference overlay has
+triangle depth sorting but does not participate in native scene depth/occlusion.
+No unfinished required work for this request. Keep heartbeat paused.

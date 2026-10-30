@@ -307,7 +307,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
-        if path not in ['/', '/index.html', '/app.js', '/style.css', '/frontend-ui.js', '/fold-placement.js', '/case-export.js', '/tab-drafts.js', '/imagery-session.js', '/address-lookup.js', '/height-tools.js', '/height-fit.mjs', '/source-cases.js']:
+        if path not in ['/', '/index.html', '/app.js', '/style.css', '/frontend-ui.js', '/fold-placement.js', '/case-export.js', '/tab-drafts.js', '/imagery-session.js', '/address-lookup.js', '/height-tools.js', '/height-fit.mjs', '/height-surface.mjs', '/source-cases.js']:
             return self.send_error(404)
         super().do_GET()
 
