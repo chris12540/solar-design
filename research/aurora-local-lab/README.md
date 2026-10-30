@@ -738,3 +738,15 @@ is selected from address origin, not current individual modeled face. Surface fo
 DSM samples, not an automatic clean roof reconstruction. Canvas reference overlay has
 triangle depth sorting but does not participate in native scene depth/occlusion.
 No unfinished required work for this request. Keep heartbeat paused.
+
+## Height surface contrast — October 30, 2026
+
+User requested stronger/different colors. Height display now uses purple/blue/teal/green/
+yellow progression with84% fill opacity and subdued dark mesh lines. Color range uses
+this house's2nd/98th height percentiles, with minimum1m span so tiny noise on flat roofs
+is not exaggerated. Endpoints clamp outliers for display only; no samples/geometry
+are changed. Legend shows ≤lower/≥upper in meters above chosen ground reference and
+updates when that reference changes. Colors remain stable when ground offset changes.
+Own height-tools.js only; no vendor, model, acquisition or fitting changes. Syntax
+checked and cached-house browser view inspected. No extra tests needed for display-only
+change. Existing source expiry, house mask selection and mesh gaps unchanged.
